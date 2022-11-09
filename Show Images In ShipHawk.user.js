@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      0.1
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
-// @author       You
+// @author       Jeff Liang
 // @match        https://shiphawk.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=shiphawk.com
 // @grant        none
