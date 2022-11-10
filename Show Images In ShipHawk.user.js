@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Show Images In ShipHawk
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.3
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -11,6 +11,7 @@
 
 (function(open) {
     XMLHttpRequest.prototype.open = function() {
+        console.log('test')
         var ran = false;
         this.addEventListener("readystatechange", function(data) {
             if (window.location.href.indexOf("ready-to-ship") > 0 && data.currentTarget.responseURL == "https://shiphawk.com/api/v4/orders/find") {
