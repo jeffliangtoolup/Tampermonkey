@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Show Images In ShipHawk
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.5
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -31,14 +31,13 @@
                     // Copy to UPC functionality
                     for (var i=1; i<tableRows.length; i++) {
                         var sku = tableRows[i].children[1].textContent;
-                        console.log(sku)
                         let upcElem = tableRows[i].children[2]
                         let upc= upcElem.textContent;
                         upcElem.addEventListener('click', function() {
                             navigator.clipboard.writeText(upc);
                         }, false);
 
-                        orders[sku] = i;
+                        orders[sku.toLowerCase()] = i;
 
                     }
                     // Add carrier information to labels
@@ -47,23 +46,23 @@
                     // Adds images to item lines
                     document.querySelector('.MuiTable-root').style = "overflow:visible; border:none; margin-left: 35%"
                     var tableRoot = document.querySelectorAll('.MuiTableRow-root');
-
                     addHeaderRow(tableRoot, 'Description');
                     addHeaderRow(tableRoot, 'Weight');
 
-
-                    info.order_line_items.forEach((order, idx) => {
+                    info.order_line_items.forEach((orderContainer, i) => {
                         //Add weight column
-                        var index = orders[order.sku]
-                        addBodyRow(tableRoot, index, order.name);
-                        addBodyRow(tableRoot, index, order.weight);
+                        orderContainer.line_item_skus.forEach((order, idx) => {
+                            var index = orders[order.sku.toLowerCase()]
 
-                        if (order.description) {
-                            var parsedOrder = JSON.parse(order.description);
-                            var image = parsedOrder.productImage;
-                            if (image) {
-                                //img_${idx}.left ="50%"; img_${idx}.right ="50%";
-                                tableRows[index].firstChild.innerHTML = `<img
+                            addBodyRow(tableRoot, index, order.name);
+                            addBodyRow(tableRoot, index, order.weight);
+
+                            if (order.description) {
+                                var parsedOrder = JSON.parse(order.description);
+                                var image = parsedOrder.productImage;
+                                if (image) {
+                                    //img_${idx}.left ="50%"; img_${idx}.right ="50%";
+                                    tableRows[index].firstChild.innerHTML = `<img
                                 name="img_${idx}"
                                 onmouseover="img_${idx}.style='position:fixed; left:20%; top:35%; border: 1px solid #555'; img_${idx}.width=500; img_${idx}.height=500;"
                                 onmouseout="img_${idx}.style='position:static; left:50%; top:50%; border: 1px solid #555'; img_${idx}.width=100; img_${idx}.height=100"
@@ -71,8 +70,9 @@
                                 height='100'
                                 style = "border: 1px solid #555;"
                                 src='${image}'>`;
+                                }
                             }
-                        }
+                        })
                     })
 
                     function addHeaderRow(tableRoot, name) {
@@ -123,7 +123,7 @@
                         test.appendChild(newDiv)
                     }
 
-                }, 500)
+                }, 1000)
             }
         }, false);
 
