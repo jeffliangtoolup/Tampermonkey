@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Show Images In ShipHawk
 // @namespace    http://tampermonkey.net/
-// @version      0.5
+// @version      0.6
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -45,6 +45,8 @@
 
                     // Adds images to item lines
                     document.querySelector('.MuiTable-root').style = "overflow:visible; border:none; margin-left: 35%"
+                    document.querySelectorAll('.MuiGrid-root.MuiGrid-container')[1].parentElement.style = "position:fixed; background: transparent;"
+
                     var tableRoot = document.querySelectorAll('.MuiTableRow-root');
                     addHeaderRow(tableRoot, 'Description');
                     addHeaderRow(tableRoot, 'Weight');
@@ -61,16 +63,26 @@
                                 var parsedOrder = JSON.parse(order.description);
                                 var image = parsedOrder.productImage;
                                 if (image) {
-                                    //img_${idx}.left ="50%"; img_${idx}.right ="50%";
                                     tableRows[index].firstChild.innerHTML = `<img
                                 name="img_${idx}"
-                                onmouseover="img_${idx}.style='position:fixed; left:20%; top:35%; border: 1px solid #555'; img_${idx}.width=500; img_${idx}.height=500;"
-                                onmouseout="img_${idx}.style='position:static; left:50%; top:50%; border: 1px solid #555'; img_${idx}.width=100; img_${idx}.height=100"
                                 width='100'
                                 height='100'
                                 style = "border: 1px solid #555;"
                                 src='${image}'>`;
                                 }
+
+                                tableRows[index].firstChild.firstChild.addEventListener('mouseover', function(e) {
+                                    setTimeout( () => {
+                                        e.target.style = "position:fixed; left:20%; top:35%;  width: 500px; height: 500px; border: 1px solid #555;"
+                                    }, 0)
+                                })
+
+
+                                tableRows[index].firstChild.firstChild.addEventListener('mouseout', function(e) {
+                                    setTimeout( () => {
+                                        e.target.style = "position:static; left:50%; top:50%;width:100px; height:100px;  border: 1px solid #555"
+                                    }, 0)
+                                })
                             }
                         })
                     })
@@ -121,6 +133,10 @@
                         newDiv.classList.add("test")
                         var test = document.querySelector('.MuiTypography-body2')
                         test.appendChild(newDiv)
+                    }
+
+                    function mouseover(){
+                        console.log('hi')
                     }
 
                 }, 1000)
