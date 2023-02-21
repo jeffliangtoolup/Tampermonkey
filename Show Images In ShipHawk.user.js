@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Show Images In ShipHawk
 // @namespace    http://tampermonkey.net/
-// @version      0.7
+// @version      0.8
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -135,7 +135,7 @@
 
                         newDiv.innerHTML = `<img width=100 src="${carrierImgMap[carrier]}"> </img><p>Rate: \$${proposedShipment.total_price}</p>`;
                         newDiv.classList.add("test")
-                        newDiv.style = "margin-right: 600px;"
+                        newDiv.style = "position: relative;left: -250px;"
 
 
                         if (profit) {
