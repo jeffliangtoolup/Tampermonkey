@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Show Images In ShipHawk
 // @namespace    http://tampermonkey.net/
-// @version      0.8
+// @version      0.9
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -133,14 +133,16 @@
                         var proposedShipment = info.proposed_shipments[0];
                         var carrier = proposedShipment.carrier;
 
-                        newDiv.innerHTML = `<img width=100 src="${carrierImgMap[carrier]}"> </img><p>Rate: \$${proposedShipment.total_price}</p>`;
+                        newDiv.innerHTML = `<img width=100 src="${carrierImgMap[carrier]}"> </img><p>Shipping Rate: \$${proposedShipment.total_price}</p>`;
                         newDiv.classList.add("test")
-                        newDiv.style = "position: relative;left: -250px;"
+
+                        var labelDiv = document.querySelector(".MuiStep-alternativeLabel");
+                        labelDiv.style = "position: relative;left: -250px;"
 
 
                         if (profit) {
-                           var posDiv = `<img height="25" width="25" src="https://i.pinimg.com/originals/f9/08/52/f90852ab39e9c63042567c02848e5647.png"> <p style="color: #006400">GOOD MARGIN: $${profit}</p></img>`
-                           var negDiv = `<img height="25" width="25" src="https://www.stickertalk.com/wp-content/uploads/2018/07/D-90-147.jpg"> <p style="color: #D8000C">BAD MARGIN: $${profit}</p></img>`
+                           var posDiv = `<img height="25" width="25" src="https://i.pinimg.com/originals/f9/08/52/f90852ab39e9c63042567c02848e5647.png"> <p style="color: #006400">GOOD ORDER MARGIN: $${profit}</p></img>`
+                           var negDiv = `<img height="25" width="25" src="https://www.stickertalk.com/wp-content/uploads/2018/07/D-90-147.jpg"> <p style="color: #D8000C">BAD ORDER MARGIN: $${profit}</p></img>`
                            var profitDiv = profit > 0 ? posDiv : negDiv;
                             newDiv.innerHTML += profitDiv;
                         }
