@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Show Images In ShipHawk
 // @namespace    http://tampermonkey.net/
-// @version      0.6
+// @version      0.7
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -23,9 +23,13 @@
                 if (currId == info.order_number) {
                     return;
                 }
+
                 currId = info.order_number;
 
                 setTimeout(function() {
+                    // Gets profit for order
+                    var profit = determineMargin(info.reference_numbers, info.proposed_shipments)
+
                     var tableRows = document.querySelectorAll('.MuiTableRow-root');
                     var orders = {}
                     // Copy to UPC functionality
@@ -41,7 +45,7 @@
 
                     }
                     // Add carrier information to labels
-                    addOrderInfo()
+                    addOrderInfo(profit)
 
                     // Adds images to item lines
                     document.querySelector('.MuiTable-root').style = "overflow:visible; border:none; margin-left: 35%"
@@ -115,7 +119,7 @@
                     }
 
 
-                    function addOrderInfo(){
+                    function addOrderInfo(profit){
                         var carrierImgMap = {
                             "FedEx": "https://shiphawk-assets-rackspace-production.s3.amazonaws.com/uploads/fedex.png",
                             "FedEx Freight": "https://shiphawk-assets-rackspace-production.s3.amazonaws.com/uploads/fedex.png",
@@ -131,12 +135,42 @@
 
                         newDiv.innerHTML = `<img width=100 src="${carrierImgMap[carrier]}"> </img><p>Rate: \$${proposedShipment.total_price}</p>`;
                         newDiv.classList.add("test")
-                        var test = document.querySelector('.MuiTypography-body2')
-                        test.appendChild(newDiv)
+                        newDiv.style = "margin-right: 600px;"
+
+
+                        if (profit) {
+                           var posDiv = `<img height="25" width="25" src="https://i.pinimg.com/originals/f9/08/52/f90852ab39e9c63042567c02848e5647.png"> <p style="color: #006400">GOOD MARGIN: $${profit}</p></img>`
+                           var negDiv = `<img height="25" width="25" src="https://www.stickertalk.com/wp-content/uploads/2018/07/D-90-147.jpg"> <p style="color: #D8000C">BAD MARGIN: $${profit}</p></img>`
+                           var profitDiv = profit > 0 ? posDiv : negDiv;
+                            newDiv.innerHTML += profitDiv;
+                        }
+
+                        var serviceDiv = document.querySelector('.MuiTypography-body2')
+                        var service = proposedShipment.service_name;
+
+
+                        if (service.toLowerCase().indexOf("surepost") >= 0) {
+                            newDiv.innerHTML += `<div style="color: #D8000C;
+                                                             background-color: #FFBABA;" class="error-msg">
+                                                     Warning: UPS Surepost selected. Please use one of following boxes:
+                                                 </div>`
+                        }
+                        serviceDiv.appendChild(newDiv)
+
                     }
 
-                    function mouseover(){
-                        console.log('hi')
+                    function determineMargin(reference_numbers, proposedShipments) {
+                        var totalRateCost = proposedShipments.reduce( (acc, curr) => {
+                            return acc + curr.total_price
+                        }, 0)
+
+                        for (var referenceField of reference_numbers) {
+                           if (referenceField.name == "Gross Profit") {
+                              var profit = parseFloat(referenceField.value.replace(/,/g, '')) - parseFloat(totalRateCost)
+                              return profit.toFixed(2)
+                           }
+                        }
+                        return null;
                     }
 
                 }, 1000)
