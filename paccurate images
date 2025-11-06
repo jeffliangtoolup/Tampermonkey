@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name        Paccurate Images In ShipHawk (Tag reader + SPA-aware iframe)
 // @namespace    http://tampermonkey.net/
-// @version      0.15
+// @version      0.16
 // @description  Read first tag UUID and embed Paccurate editor; SPA-aware. Minimized & zoomable with persistent size.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
+// @match       https://fswtu.tms.myshiphawk.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=shiphawk.com
 // @run-at       document-start
 // @grant        none
