@@ -1,0 +1,290 @@
+// ==UserScript==
+// @name        Paccurate Images In ShipHawk (Tag reader + SPA-aware iframe)
+// @namespace    http://tampermonkey.net/
+// @version      0.15
+// @description  Read first tag UUID and embed Paccurate editor; SPA-aware. Minimized & zoomable with persistent size.
+// @author       Jeff Liang
+// @match        https://shiphawk.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=shiphawk.com
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  'use strict';
+
+  // ---------- small helpers ----------
+  function waitFor(fn, { timeout = 15000, interval = 100 } = {}) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function tick() {
+        try {
+          const v = fn();
+          if (v) return resolve(v);
+          if (Date.now() - start >= timeout) return reject(new Error('waitFor timeout'));
+          setTimeout(tick, interval);
+        } catch (e) { reject(e); }
+      })();
+    });
+  }
+
+  // Extract tags (prefer data-test-id on the delete icon; fallback to chip labels)
+  function getTagsFromSvgs(root = document) {
+    const svgs = Array.from(root.querySelectorAll('svg[data-test-id^="remove-tag-icon-"]'));
+    const tags = svgs.map(svg => {
+      const dt = svg.getAttribute('data-test-id') || '';
+      const prefix = 'remove-tag-icon-';
+      if (!dt.startsWith(prefix)) return null;
+      const rest = dt.slice(prefix.length);  // "<TAG>-<index>"
+      const cut = rest.lastIndexOf('-');
+      return cut > 0 ? rest.slice(0, cut) : rest;
+    }).filter(Boolean);
+    return [...new Set(tags)];
+  }
+  function getTagsFromLabels(root = document) {
+    return Array.from(root.querySelectorAll('.react-tagsinput .MuiChip-label'))
+      .map(el => (el.textContent || '').trim())
+      .filter(Boolean);
+  }
+  function readTags() {
+    let tags = getTagsFromSvgs();
+    if (!tags.length) tags = getTagsFromLabels();
+    return tags;
+  }
+
+  // ---------- panel + zoom + persistence ----------
+  const WRAP_ID   = 'tm-paccurate-wrap';
+  const IFRAME_ID = 'tm-paccurate-editor';
+  const HOLDER_ID = 'tm-paccurate-holder';
+
+  const ZOOM_KEY  = 'tmPaccurateZoom';
+  const MIN_KEY   = 'tmPaccurateMin';
+  const SIZE_KEY  = 'tmPaccurateSize'; // {w, h} in px
+
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const getZoom = () => {
+    const z = parseFloat(localStorage.getItem(ZOOM_KEY) || '0.85');
+    return clamp(isNaN(z) ? 0.85 : z, 0.6, 1.2);
+  };
+  const setZoom = (z) => localStorage.setItem(ZOOM_KEY, String(clamp(z, 0.6, 1.2)));
+
+  const getMin  = () => localStorage.getItem(MIN_KEY) === '1';
+  const setMin  = (b) => localStorage.setItem(MIN_KEY, b ? '1' : '0');
+
+  const getSize = () => {
+    try { return JSON.parse(localStorage.getItem(SIZE_KEY) || 'null'); }
+    catch { return null; }
+  };
+  const setSize = (w, h) => {
+    if (!w || !h) return;
+    localStorage.setItem(SIZE_KEY, JSON.stringify({ w: Math.round(w), h: Math.round(h) }));
+  };
+
+  function applyZoom(z) {
+    const iframe = document.getElementById(IFRAME_ID);
+    if (!iframe) return;
+    iframe.style.transform = `scale(${z})`;
+    iframe.style.transformOrigin = 'top left';
+    iframe.style.width  = (100 / z) + '%';
+    iframe.style.height = (100 / z) + '%';
+    const label = document.getElementById('tm-paccurate-zoom-label');
+    if (label) label.textContent = Math.round(z * 100) + '%';
+  }
+
+  function ensurePanel() {
+    let wrap = document.getElementById(WRAP_ID);
+    if (wrap) return wrap;
+
+    wrap = document.createElement('div');
+    wrap.id = WRAP_ID;
+    wrap.style.cssText = `
+      position: fixed;
+      right: 16px; bottom: 16px;
+      z-index: 9999;
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.12);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+      border-radius: 10px;
+      width: 1200px; height: 460px;
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 32px);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      resize: both; /* drag bottom/right to resize */
+    `;
+
+    // header
+    const header = document.createElement('div');
+    header.style.cssText = `
+      display:flex; align-items:center; justify-content:space-between;
+      gap:8px; padding:8px 10px; border-bottom:1px solid rgba(0,0,0,0.08);
+      font: 600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:#fafafa;
+    `;
+    const left = document.createElement('div');
+    left.textContent = 'Paccurate Config Editor';
+
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex; align-items:center; gap:6px;';
+    const btn = (txt, title) => {
+      const b = document.createElement('button');
+      b.textContent = txt;
+      b.title = title;
+      b.style.cssText = 'border:1px solid rgba(0,0,0,0.1); border-radius:6px; padding:2px 6px; background:#fff; cursor:pointer;';
+      return b;
+    };
+    const zoomOut  = btn('−', 'Zoom out');
+    const zoomLbl  = document.createElement('span'); zoomLbl.id = 'tm-paccurate-zoom-label'; zoomLbl.style.cssText = 'min-width:34px; text-align:center;';
+    const zoomIn   = btn('+', 'Zoom in');
+    const minimize = btn('–', 'Minimize');
+    const close    = btn('×', 'Close');
+
+    right.append(zoomOut, zoomLbl, zoomIn, minimize, close);
+    header.append(left, right);
+    wrap.appendChild(header);
+
+    const holder = document.createElement('div');
+    holder.id = HOLDER_ID;
+    holder.style.cssText = 'flex:1 1 auto; position:relative; overflow:auto; background:#fff;';
+    wrap.appendChild(holder);
+
+    const iframe = document.createElement('iframe');
+    iframe.id = IFRAME_ID;
+    iframe.style.cssText = 'border:0; display:block;';
+    iframe.setAttribute('loading', 'lazy');
+    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    holder.appendChild(iframe);
+
+    // controls
+    let z = getZoom();
+    applyZoom(z);
+    zoomOut.addEventListener('click', () => { z = clamp(z - 0.05, 0.6, 1.2); setZoom(z); applyZoom(z); });
+    zoomIn .addEventListener('click', () => { z = clamp(z + 0.05, 0.6, 1.2); setZoom(z); applyZoom(z); });
+
+    // collapse/expand + persistence
+    function setCollapsed(on) {
+      if (on) {
+        wrap.style.height = '44px';
+        wrap.setAttribute('data-collapsed', '1');
+        minimize.textContent = '+';
+        setMin(true);
+      } else {
+        const sz = getSize();
+        if (sz && sz.h) wrap.style.height = sz.h + 'px';
+        if (sz && sz.w) wrap.style.width  = sz.w + 'px';
+        else wrap.style.height = '460px';
+        wrap.setAttribute('data-collapsed', '0');
+        minimize.textContent = '–';
+        setMin(false);
+      }
+    }
+    minimize.addEventListener('click', () => {
+      const collapsed = wrap.getAttribute('data-collapsed') === '1';
+      setCollapsed(!collapsed);
+    });
+    close.addEventListener('click', () => wrap.remove());
+
+    // apply saved size before attaching
+    const saved = getSize();
+    if (saved && saved.w) wrap.style.width  = saved.w + 'px';
+    if (saved && saved.h) wrap.style.height = (getMin() ? 44 : saved.h) + 'px';
+
+    document.body.appendChild(wrap);
+
+    // Minimized by default on first run; thereafter, remember your choice
+    const DEFAULT_MINIMIZED = true;
+    const initial = (localStorage.getItem(MIN_KEY) === null) ? DEFAULT_MINIMIZED : getMin();
+    setCollapsed(initial);
+
+    // persist size on user resize (debounced), but ignore when collapsed
+    const ro = new ResizeObserver(() => {
+      if (wrap.getAttribute('data-collapsed') === '1') return;
+      clearTimeout(ro._t);
+      ro._t = setTimeout(() => setSize(wrap.clientWidth, wrap.clientHeight), 120);
+    });
+    ro.observe(wrap);
+
+    return wrap;
+  }
+
+  function removePanel() {
+    const wrap = document.getElementById(WRAP_ID);
+    if (wrap) wrap.remove();
+  }
+
+  // ---------- main: set iframe based on current tag ----------
+  let currentUuid = null;
+  function setIframeForUuid(uuid) {
+    if (!uuid) {
+      currentUuid = null;
+      removePanel();
+      return;
+    }
+    if (uuid === currentUuid) return;
+    currentUuid = uuid;
+
+    ensurePanel();
+    const iframe = document.getElementById(IFRAME_ID);
+    const src = `https://inspector.manage.paccurate.io/config-editor?packUuid=${encodeURIComponent(uuid)}&embed=true`;
+    if (iframe.src !== src) iframe.src = src;
+    applyZoom(getZoom());
+  }
+
+  function refreshFromDom({ showAlert = false } = {}) {
+    const tags = readTags();
+    if (showAlert) alert(tags.length ? tags.join('\n') : 'No tags found.');
+    const uuid = tags[0] || null;
+    setIframeForUuid(uuid);
+  }
+
+  // ---------- observers: tags area + route changes ----------
+  let tagObserver;
+  function observeTagArea() {
+    if (tagObserver) tagObserver.disconnect();
+    const container =
+      document.querySelector('[data-test-id="tags-select"]')?.parentElement?.parentElement ||
+      document.querySelector('.react-tagsinput') ||
+      document.body;
+
+    tagObserver = new MutationObserver(() => {
+      clearTimeout(observeTagArea._t);
+      observeTagArea._t = setTimeout(() => refreshFromDom(), 60);
+    });
+    tagObserver.observe(container, { childList: true, subtree: true, characterData: true });
+  }
+
+  function installRouteHooks() {
+    let lastPath = location.pathname + location.search;
+    const onRoute = () => {
+      const now = location.pathname + location.search;
+      if (now === lastPath) return;
+      lastPath = now;
+      setTimeout(() => {
+        refreshFromDom();
+        observeTagArea();
+      }, 150);
+    };
+    const push = history.pushState;
+    const replace = history.replaceState;
+    history.pushState = function () { const r = push.apply(this, arguments); onRoute(); return r; };
+    history.replaceState = function () { const r = replace.apply(this, arguments); onRoute(); return r; };
+    window.addEventListener('popstate', onRoute);
+    setInterval(onRoute, 800); // fallback
+  }
+
+  // ---------- boot ----------
+  function boot() {
+    waitFor(() =>
+      document.querySelector('svg[data-test-id^="remove-tag-icon-"]') ||
+      document.querySelector('.react-tagsinput') ||
+      document.body
+    ).catch(() => null).then(() => {
+      refreshFromDom();   // initial pass
+      observeTagArea();   // react to tag changes
+      installRouteHooks();// react to SPA route changes
+    });
+  }
+
+  if (document.readyState === 'complete') boot();
+  else window.addEventListener('load', boot, { once: true });
+})();
