@@ -1,20 +1,36 @@
 // ==UserScript==
-// @name        Paccurate Images In ShipHawk (Tag reader + SPA-aware iframe)
+// @name         Paccurate Images In ShipHawk (Popup window)
 // @namespace    http://tampermonkey.net/
-// @version      0.16
-// @description  Read first tag UUID and embed Paccurate editor; SPA-aware. Minimized & zoomable with persistent size.
+// @version      0.18
+// @description  Open Paccurate Config Editor in a separate popup; remembers position/size (even on a second monitor). SPA-aware; hotkeys.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
-// @match       https://fswtu.tms.myshiphawk.com/*
+// @match        https://fswtu.tms.myshiphawk.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=shiphawk.com
 // @run-at       document-start
 // @grant        none
+// @downloadURL  https://update.greasyfork.org/scripts/554919/Paccurate%20Images%20In%20ShipHawk%20%28Tag%20reader%20%2B%20SPA-aware%20iframe%29.user.js
+// @updateURL    https://update.greasyfork.org/scripts/554919/Paccurate%20Images%20In%20ShipHawk%20%28Tag%20reader%20%2B%20SPA-aware%20iframe%29.meta.js
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  // ---------- small helpers ----------
+  // ---------- Config ----------
+  const POP_NAME   = 'paccurate_config_editor_popup';
+  const URL_BASE   = 'https://inspector.manage.paccurate.io/config-editor';
+  const AUTO_OPEN  = true;
+  const AUTO_FOCUS = true;
+  const HOTKEY_OPEN = { altKey: true, key: 'p' }; // Alt+P
+  const HOTKEY_SAVE = { altKey: true, key: 's' }; // Alt+S
+
+  const DEFAULTS = { width: 1100, height: 800, left: 80, top: 60 };
+
+  // ---------- Storage keys ----------
+  const SIZE_KEY = 'tmPaccuratePopupSize'; // {w,h,left,top}
+  const LAST_UUID_KEY = 'tmPaccurateLastUuid';
+
+  // ---------- Utils ----------
   function waitFor(fn, { timeout = 15000, interval = 100 } = {}) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
@@ -29,7 +45,46 @@
     });
   }
 
-  // Extract tags (prefer data-test-id on the delete icon; fallback to chip labels)
+  function getSavedRect() {
+    try {
+      const v = JSON.parse(localStorage.getItem(SIZE_KEY) || 'null');
+      if (!v) return { ...DEFAULTS };
+      const scrW = (window.screen?.availWidth || 1920);
+      const scrH = (window.screen?.availHeight || 1080);
+      const w = Math.max(600, Math.min(scrW - 40, v.w || DEFAULTS.width));
+      const h = Math.max(400, Math.min(scrH - 60, v.h || DEFAULTS.height));
+      // NOTE: left/top can be negative on multi-monitor setups; allow it
+      const left = (typeof v.left === 'number') ? v.left : DEFAULTS.left;
+      const top  = (typeof v.top  === 'number') ? v.top  : DEFAULTS.top;
+      return { width: w, height: h, left, top };
+    } catch {
+      return { ...DEFAULTS };
+    }
+  }
+
+  function saveRect(w, h, left, top) {
+    const payload = {
+      w: Math.round(w ?? DEFAULTS.width),
+      h: Math.round(h ?? DEFAULTS.height),
+      left: Math.round(left ?? DEFAULTS.left),
+      top: Math.round(top  ?? DEFAULTS.top),
+    };
+    localStorage.setItem(SIZE_KEY, JSON.stringify(payload));
+  }
+
+  function makeUrl(uuid) {
+    const u = new URL(URL_BASE);
+    u.searchParams.set('packUuid', uuid);
+    return u.toString();
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+    } catch { /* ignore */ }
+  }
+
+  // ---------- Tag extraction ----------
   function getTagsFromSvgs(root = document) {
     const svgs = Array.from(root.querySelectorAll('svg[data-test-id^="remove-tag-icon-"]'));
     const tags = svgs.map(svg => {
@@ -53,192 +108,149 @@
     return tags;
   }
 
-  // ---------- panel + zoom + persistence ----------
-  const WRAP_ID   = 'tm-paccurate-wrap';
-  const IFRAME_ID = 'tm-paccurate-editor';
-  const HOLDER_ID = 'tm-paccurate-holder';
-
-  const ZOOM_KEY  = 'tmPaccurateZoom';
-  const MIN_KEY   = 'tmPaccurateMin';
-  const SIZE_KEY  = 'tmPaccurateSize'; // {w, h} in px
-
-  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-  const getZoom = () => {
-    const z = parseFloat(localStorage.getItem(ZOOM_KEY) || '0.85');
-    return clamp(isNaN(z) ? 0.85 : z, 0.6, 1.2);
-  };
-  const setZoom = (z) => localStorage.setItem(ZOOM_KEY, String(clamp(z, 0.6, 1.2)));
-
-  const getMin  = () => localStorage.getItem(MIN_KEY) === '1';
-  const setMin  = (b) => localStorage.setItem(MIN_KEY, b ? '1' : '0');
-
-  const getSize = () => {
-    try { return JSON.parse(localStorage.getItem(SIZE_KEY) || 'null'); }
-    catch { return null; }
-  };
-  const setSize = (w, h) => {
-    if (!w || !h) return;
-    localStorage.setItem(SIZE_KEY, JSON.stringify({ w: Math.round(w), h: Math.round(h) }));
-  };
-
-  function applyZoom(z) {
-    const iframe = document.getElementById(IFRAME_ID);
-    if (!iframe) return;
-    iframe.style.transform = `scale(${z})`;
-    iframe.style.transformOrigin = 'top left';
-    iframe.style.width  = (100 / z) + '%';
-    iframe.style.height = (100 / z) + '%';
-    const label = document.getElementById('tm-paccurate-zoom-label');
-    if (label) label.textContent = Math.round(z * 100) + '%';
-  }
-
-  function ensurePanel() {
-    let wrap = document.getElementById(WRAP_ID);
-    if (wrap) return wrap;
-
-    wrap = document.createElement('div');
-    wrap.id = WRAP_ID;
-    wrap.style.cssText = `
-      position: fixed;
-      right: 16px; bottom: 16px;
-      z-index: 9999;
-      background: #fff;
-      border: 1px solid rgba(0,0,0,0.12);
-      box-shadow: 0 10px 24px rgba(0,0,0,0.15);
-      border-radius: 10px;
-      width: 1200px; height: 460px;
-      max-width: calc(100vw - 32px);
-      max-height: calc(100vh - 32px);
-      display: flex; flex-direction: column;
-      overflow: hidden;
-      resize: both; /* drag bottom/right to resize */
-    `;
-
-    // header
-    const header = document.createElement('div');
-    header.style.cssText = `
-      display:flex; align-items:center; justify-content:space-between;
-      gap:8px; padding:8px 10px; border-bottom:1px solid rgba(0,0,0,0.08);
-      font: 600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      background:#fafafa;
-    `;
-    const left = document.createElement('div');
-    left.textContent = 'Paccurate Config Editor';
-
-    const right = document.createElement('div');
-    right.style.cssText = 'display:flex; align-items:center; gap:6px;';
-    const btn = (txt, title) => {
-      const b = document.createElement('button');
-      b.textContent = txt;
-      b.title = title;
-      b.style.cssText = 'border:1px solid rgba(0,0,0,0.1); border-radius:6px; padding:2px 6px; background:#fff; cursor:pointer;';
-      return b;
-    };
-    const zoomOut  = btn('−', 'Zoom out');
-    const zoomLbl  = document.createElement('span'); zoomLbl.id = 'tm-paccurate-zoom-label'; zoomLbl.style.cssText = 'min-width:34px; text-align:center;';
-    const zoomIn   = btn('+', 'Zoom in');
-    const minimize = btn('–', 'Minimize');
-    const close    = btn('×', 'Close');
-
-    right.append(zoomOut, zoomLbl, zoomIn, minimize, close);
-    header.append(left, right);
-    wrap.appendChild(header);
-
-    const holder = document.createElement('div');
-    holder.id = HOLDER_ID;
-    holder.style.cssText = 'flex:1 1 auto; position:relative; overflow:auto; background:#fff;';
-    wrap.appendChild(holder);
-
-    const iframe = document.createElement('iframe');
-    iframe.id = IFRAME_ID;
-    iframe.style.cssText = 'border:0; display:block;';
-    iframe.setAttribute('loading', 'lazy');
-    iframe.setAttribute('referrerpolicy', 'no-referrer');
-    holder.appendChild(iframe);
-
-    // controls
-    let z = getZoom();
-    applyZoom(z);
-    zoomOut.addEventListener('click', () => { z = clamp(z - 0.05, 0.6, 1.2); setZoom(z); applyZoom(z); });
-    zoomIn .addEventListener('click', () => { z = clamp(z + 0.05, 0.6, 1.2); setZoom(z); applyZoom(z); });
-
-    // collapse/expand + persistence
-    function setCollapsed(on) {
-      if (on) {
-        wrap.style.height = '44px';
-        wrap.setAttribute('data-collapsed', '1');
-        minimize.textContent = '+';
-        setMin(true);
-      } else {
-        const sz = getSize();
-        if (sz && sz.h) wrap.style.height = sz.h + 'px';
-        if (sz && sz.w) wrap.style.width  = sz.w + 'px';
-        else wrap.style.height = '460px';
-        wrap.setAttribute('data-collapsed', '0');
-        minimize.textContent = '–';
-        setMin(false);
-      }
-    }
-    minimize.addEventListener('click', () => {
-      const collapsed = wrap.getAttribute('data-collapsed') === '1';
-      setCollapsed(!collapsed);
-    });
-    close.addEventListener('click', () => wrap.remove());
-
-    // apply saved size before attaching
-    const saved = getSize();
-    if (saved && saved.w) wrap.style.width  = saved.w + 'px';
-    if (saved && saved.h) wrap.style.height = (getMin() ? 44 : saved.h) + 'px';
-
-    document.body.appendChild(wrap);
-
-    // Minimized by default on first run; thereafter, remember your choice
-    const DEFAULT_MINIMIZED = true;
-    const initial = (localStorage.getItem(MIN_KEY) === null) ? DEFAULT_MINIMIZED : getMin();
-    setCollapsed(initial);
-
-    // persist size on user resize (debounced), but ignore when collapsed
-    const ro = new ResizeObserver(() => {
-      if (wrap.getAttribute('data-collapsed') === '1') return;
-      clearTimeout(ro._t);
-      ro._t = setTimeout(() => setSize(wrap.clientWidth, wrap.clientHeight), 120);
-    });
-    ro.observe(wrap);
-
-    return wrap;
-  }
-
-  function removePanel() {
-    const wrap = document.getElementById(WRAP_ID);
-    if (wrap) wrap.remove();
-  }
-
-  // ---------- main: set iframe based on current tag ----------
+  // ---------- Popup management ----------
+  let popupRef = null;
   let currentUuid = null;
-  function setIframeForUuid(uuid) {
-    if (!uuid) {
-      currentUuid = null;
-      removePanel();
+  let geomTimer = null;
+  let lastGeom = null;
+
+  function startGeometryWatcher() {
+    stopGeometryWatcher();
+    // Try to sample geometry every 500ms while the popup is open.
+    geomTimer = setInterval(() => {
+      try {
+        if (!popupRef || popupRef.closed) return;
+        // These are usually readable for a window you opened (even cross-origin), but we guard with try/catch.
+        const w  = popupRef.outerWidth;
+        const h  = popupRef.outerHeight;
+        const lx = (typeof popupRef.screenX === 'number') ? popupRef.screenX : (typeof popupRef.screenLeft === 'number' ? popupRef.screenLeft : undefined);
+        const ty = (typeof popupRef.screenY === 'number') ? popupRef.screenY : (typeof popupRef.screenTop  === 'number' ? popupRef.screenTop  : undefined);
+        if ([w,h,lx,ty].every(v => typeof v === 'number')) {
+          const key = `${w}x${h}@${lx},${ty}`;
+          if (key !== lastGeom) {
+            lastGeom = key;
+            saveRect(w, h, lx, ty);
+          }
+        }
+      } catch {
+        // Ignore; some browsers block cross-origin geometry reads
+      }
+      if (!popupRef || popupRef.closed) stopGeometryWatcher();
+    }, 500);
+  }
+
+  function stopGeometryWatcher() {
+    if (geomTimer) clearInterval(geomTimer);
+    geomTimer = null;
+  }
+
+  function nudgeToSavedRect() {
+    try {
+      if (!popupRef || popupRef.closed) return;
+      const r = getSavedRect();
+      // A small delay improves reliability after navigation
+      setTimeout(() => {
+        try {
+          if (typeof popupRef.moveTo === 'function') popupRef.moveTo(r.left, r.top);
+          if (typeof popupRef.resizeTo === 'function') popupRef.resizeTo(r.width, r.height);
+        } catch { /* ignore */ }
+      }, 200);
+    } catch { /* ignore */ }
+  }
+
+  function openOrUpdatePopup(uuid, { focus = AUTO_FOCUS } = {}) {
+    if (!uuid) return;
+    const url = makeUrl(uuid);
+    const r = getSavedRect();
+
+    const features = [
+      `width=${r.width}`, `height=${r.height}`,
+      `left=${r.left}`, `top=${r.top}`,
+      'resizable=yes', 'scrollbars=yes', 'toolbar=no', 'location=no', 'status=no', 'menubar=no'
+    ].join(',');
+
+    try {
+      if (!popupRef || popupRef.closed) {
+        popupRef = window.open(url, POP_NAME, features);
+      } else {
+        try { popupRef.location.href = url; }
+        catch { popupRef = window.open(url, POP_NAME, features); }
+      }
+      if (popupRef && focus) popupRef.focus();
+      // Try to enforce saved geometry even if the browser ignored window.open’s features
+      nudgeToSavedRect();
+      startGeometryWatcher();
+    } catch (e) {
+      alert('Popup was blocked. Click OK to copy the URL, then paste it into a new tab:\n\n' + url);
+      copyToClipboard(url);
       return;
     }
+
+    // Save an initial snapshot shortly after opening in case the browser gave us actual values
+    setTimeout(() => {
+      try {
+        if (!popupRef || popupRef.closed) return;
+        const ow = popupRef.outerWidth, oh = popupRef.outerHeight;
+        const ox = (typeof popupRef.screenX === 'number' ? popupRef.screenX : popupRef.screenLeft);
+        const oy = (typeof popupRef.screenY === 'number' ? popupRef.screenY : popupRef.screenTop);
+        if ([ow,oh,ox,oy].every(v => typeof v === 'number')) saveRect(ow, oh, ox, oy);
+      } catch { /* ignore */ }
+    }, 500);
+  }
+
+  function setPopupForUuid(uuid) {
+    if (!uuid) return;
     if (uuid === currentUuid) return;
     currentUuid = uuid;
-
-    ensurePanel();
-    const iframe = document.getElementById(IFRAME_ID);
-    const src = `https://inspector.manage.paccurate.io/config-editor?packUuid=${encodeURIComponent(uuid)}&embed=true`;
-    if (iframe.src !== src) iframe.src = src;
-    applyZoom(getZoom());
+    localStorage.setItem(LAST_UUID_KEY, uuid);
+    if (AUTO_OPEN) openOrUpdatePopup(uuid);
   }
 
-  function refreshFromDom({ showAlert = false } = {}) {
+  // ---------- Hotkeys ----------
+  window.addEventListener('keydown', (e) => {
+    const k = e.key?.toLowerCase();
+    // Alt+P -> open/focus last popup
+    if (e.altKey === !!HOTKEY_OPEN.altKey && k === HOTKEY_OPEN.key) {
+      e.preventDefault();
+      const last = currentUuid || localStorage.getItem(LAST_UUID_KEY);
+      if (last) openOrUpdatePopup(last, { focus: true });
+      else alert('No tag UUID found yet on this page.');
+    }
+    // Alt+S -> force-save current geometry (useful if live sampling is blocked)
+    if (e.altKey === !!HOTKEY_SAVE.altKey && k === HOTKEY_SAVE.key) {
+      e.preventDefault();
+      try {
+        if (popupRef && !popupRef.closed) {
+          const ow = popupRef.outerWidth, oh = popupRef.outerHeight;
+          const ox = (typeof popupRef.screenX === 'number' ? popupRef.screenX : popupRef.screenLeft);
+          const oy = (typeof popupRef.screenY === 'number' ? popupRef.screenY : popupRef.screenTop);
+          if ([ow,oh,ox,oy].every(v => typeof v === 'number')) {
+            saveRect(ow, oh, ox, oy);
+            alert(`Saved popup position: ${ow}×${oh} @ ${ox},${oy}`);
+          } else {
+            alert('Could not read popup geometry in this browser.');
+          }
+        } else {
+          alert('Popup not open.');
+        }
+      } catch {
+        alert('Browser blocked reading popup geometry.');
+      }
+    }
+  }, true);
+
+  // ---------- DOM + SPA hooks ----------
+  function readTags() {
+    let tags = getTagsFromSvgs();
+    if (!tags.length) tags = getTagsFromLabels();
+    return tags;
+  }
+  function refreshFromDom() {
     const tags = readTags();
-    if (showAlert) alert(tags.length ? tags.join('\n') : 'No tags found.');
     const uuid = tags[0] || null;
-    setIframeForUuid(uuid);
+    setPopupForUuid(uuid);
   }
 
-  // ---------- observers: tags area + route changes ----------
   let tagObserver;
   function observeTagArea() {
     if (tagObserver) tagObserver.disconnect();
@@ -249,7 +261,7 @@
 
     tagObserver = new MutationObserver(() => {
       clearTimeout(observeTagArea._t);
-      observeTagArea._t = setTimeout(() => refreshFromDom(), 60);
+      observeTagArea._t = setTimeout(refreshFromDom, 60);
     });
     tagObserver.observe(container, { childList: true, subtree: true, characterData: true });
   }
@@ -273,16 +285,15 @@
     setInterval(onRoute, 800); // fallback
   }
 
-  // ---------- boot ----------
   function boot() {
     waitFor(() =>
       document.querySelector('svg[data-test-id^="remove-tag-icon-"]') ||
       document.querySelector('.react-tagsinput') ||
       document.body
     ).catch(() => null).then(() => {
-      refreshFromDom();   // initial pass
-      observeTagArea();   // react to tag changes
-      installRouteHooks();// react to SPA route changes
+      refreshFromDom();
+      observeTagArea();
+      installRouteHooks();
     });
   }
 
