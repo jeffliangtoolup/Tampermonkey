@@ -9,12 +9,13 @@
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=shiphawk.com
 // @run-at       document-start
 // @grant        none
-// @downloadURL  https://update.greasyfork.org/scripts/554919/Paccurate%20Images%20In%20ShipHawk%20%28Tag%20reader%20%2B%20SPA-aware%20iframe%29.user.js
-// @updateURL    https://update.greasyfork.org/scripts/554919/Paccurate%20Images%20In%20ShipHawk%20%28Tag%20reader%20%2B%20SPA-aware%20iframe%29.meta.js
+// @downloadURL https://update.greasyfork.org/scripts/554919/Paccurate%20Images%20In%20ShipHawk%20%28Popup%20window%29.user.js
+// @updateURL https://update.greasyfork.org/scripts/554919/Paccurate%20Images%20In%20ShipHawk%20%28Popup%20window%29.meta.js
 // ==/UserScript==
 
 (function () {
   'use strict';
+    console.log("RAN PACCURATE")
 
   // ---------- Config ----------
   const POP_NAME   = 'paccurate_config_editor_popup';
