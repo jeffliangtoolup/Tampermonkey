@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Paccurate Images In ShipHawk (Tag reader + SPA-aware iframe)
 // @namespace    http://tampermonkey.net/
-// @version      0.18
+// @version      0.19
 // @description  Open Paccurate Config Editor in a separate popup; remembers position/size (even on a second monitor). SPA-aware; hotkeys.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
@@ -76,6 +76,7 @@
   function makeUrl(uuid) {
     const u = new URL(URL_BASE);
     u.searchParams.set('packUuid', uuid);
+    u.searchParams.set('embed', 'true');
     return u.toString();
   }
 
