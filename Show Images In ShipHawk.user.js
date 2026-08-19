@@ -5,6 +5,9 @@
 // @description  Adds images in shiphawk. This adds click to copy UPC and enlarge image.
 // @author       Jeff Liang
 // @match        https://shiphawk.com/*
+// @match        https://*.tms.myshiphawk.com/*
+// @match        https://*.myshiphawk.com/*
+// @match        https://*.shiphawk.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=shiphawk.com
 // @grant        none
 // ==/UserScript==
