@@ -22,16 +22,25 @@ set -u
 # `basic-auth-header` and `cli-userpass-flag` sit in the generic list because each carries a
 # value with no key name beside it — `assigned-secret` below keys off a name and misses both.
 #
-# TODO(template): add this project's own credential shapes — the session token, the
-# vendor key prefix, the signed-URL parameter. The generic list catches generic
-# leaks; the credential that actually leaks is project-shaped.
+# This project's own shapes follow the generic list. Two things they are NOT:
+#   - They are not literal values. Writing this account's number into the detector would
+#     put the number in a tracked file — moving the leak, not closing it. Every pattern
+#     below matches a SHAPE (a number beside the word "account", the `_SB<n>` realm
+#     suffix, a NetSuite token field name), so it catches the next account too.
+#   - They are not a substitute for judgment on proprietary data. No regex recognizes a
+#     customer name, a margin figure, or a business rule. docs/SAFETY-MODES.md →
+#     What must never leave this repo carries that half, and it is the reader's job.
 PATTERNS='private-key||-----BEGIN [A-Z ]*PRIVATE KEY-----
 aws-access-key||AKIA[0-9A-Z]{16}
 url-credentials||://[^/[:space:]:@]+:[^/[:space:]@]{6,}@
 bearer-token|-i|bearer [A-Za-z0-9._-]{20,}
 basic-auth-header|-i|basic [A-Za-z0-9+/]{24,}={0,2}
 cli-userpass-flag||-u[[:space:]]+[^[:space:]:]+:[^[:space:]]{12,}
-assigned-secret|-i|(api[_-]?key|apikey|secret|token|password|passwd)[^[:alnum:][:space:]]{0,1}[[:space:]]*[:=][[:space:]]*[^[:alnum:][:space:]]{0,2}[A-Za-z0-9/+._-]{16,}'
+assigned-secret|-i|(api[_-]?key|apikey|secret|token|password|passwd)[^[:alnum:][:space:]]{0,1}[[:space:]]*[:=][[:space:]]*[^[:alnum:][:space:]]{0,2}[A-Za-z0-9/+._-]{16,}
+netsuite-account-id|-i|(account|acct|realm|companyid|company[_ -]id)[^[:alnum:]]{0,3}[0-9]{6,8}(_SB[0-9]+)?
+netsuite-sandbox-realm||[0-9]{6,8}_SB[0-9]+
+netsuite-token-field|-i|(tokenid|token[_-]id|tokensecret|token[_-]secret|consumerkey|consumer[_-]key|consumersecret|consumer[_-]secret)[^[:alnum:][:space:]]{0,1}[[:space:]]*[:=][[:space:]]*[^[:alnum:][:space:]]{0,2}[A-Za-z0-9]{16,}
+shiphawk-key|-i|shiphawk[^[:alnum:]]{0,3}(api)?[_-]?(key|token)[^[:alnum:][:space:]]{0,1}[[:space:]]*[:=][[:space:]]*[^[:alnum:][:space:]]{0,2}[A-Za-z0-9._-]{16,}'
 
 # A line matching this documents a shape; it does not carry a value.
 PLACEHOLDER='REDACTED|PLACEHOLDER|EXAMPLE|CHANGE_?ME|YOUR_|your_|xxxx|<[A-Za-z_-]+>|\$\{|\$[A-Z_]+'
