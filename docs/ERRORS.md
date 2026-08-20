@@ -37,9 +37,14 @@ The base class is abstract; every concrete class fixes its token and narrows its
 <!-- TODO(template): one row per class. The "Who fixes it" column is the whole point of the
      taxonomy — if two rows answer it identically, they are one class. -->
 
+**There is no error taxonomy in this project, and no class to put in this table.** Neither
+userscript defines, throws, or catches a typed error — they run inside a page they don't own,
+where the only "handler" available is the browser console. The scheme above governs code that
+gets written from here on; it is not a description of what exists.
+
 | Class | Token | Who fixes it | What to do |
 |---|---|---|---|
-| *(none yet)* | | | |
+| *(none — see Swallowed failures below)* | | | |
 
 A class whose only distinction is *"do not retry"* still earns its own row: two situations can
 both be "config" while only one of them means **stop**.
@@ -51,7 +56,29 @@ both be "config" while only one of them means **stop**.
 
 | Class | Code | Thrown by |
 |---|---|---|
-| *(none yet)* | | |
+| *(none — nothing in this repo throws)* | | |
+
+## Swallowed failures
+
+What this project has instead of a taxonomy: **six sites where a failure is deliberately caught
+and discarded.** Each is a reasonable choice inside a userscript — a thrown error in a page you
+don't own helps nobody — but together they are why a broken script looks identical to a working
+one. Both files are grandfathered (`../CLAUDE.md` § Grandfathered files); this table exists so
+the silence is documented rather than discovered.
+
+| Site | Swallows | What it leaves unobservable |
+|---|---|---|
+| `boot()`'s `.catch(() => null)` (`paccurate images`) | The 15 s `waitFor` rejection | Whether the tag area was ever found. Startup proceeds identically either way. |
+| Popup geometry sampling (`startGeometryWatcher`) | Cross-origin property reads the browser blocks | Whether geometry is being persisted at all. Alt+S is the manual fallback, and the user has to know to use it. |
+| `nudgeToSavedRect` and its inner `setTimeout` | `moveTo`/`resizeTo` refusals | Whether the remembered position was actually applied. |
+| `getSavedRect` | A `JSON.parse` failure on corrupt `localStorage` | A silent reset to defaults, indistinguishable from a first run. |
+| `copyToClipboard` | Clipboard-write rejection, insecure context | Whether the URL a blocked-popup alert told the user to paste is actually on the clipboard. |
+| The `alert` on a blocked popup (`openOrUpdatePopup`) | Nothing — this one is *visible*, and the only failure in either file the user is told about | — |
+
+Two failures in `Show Images` are not caught anywhere, and so surface only as a console error
+plus a page that silently didn't get its images: `JSON.parse(order.description)` on a
+non-JSON description, and any DOM query that returns `null` before the 1000 ms settle
+([`BUDGETS.md`](BUDGETS.md)) has elapsed.
 
 - **A code is promoted to its own class only when its remedy differs from its siblings'.**
 - **A code with no thrower is speculative** — add one when a throw site needs it, not in advance.
@@ -62,15 +89,20 @@ both be "config" while only one of them means **stop**.
 The most useful section in this doc, and the easiest to skip. Name the failures you deliberately
 leave untyped, and why — otherwise every reader re-asks whether the omission was an oversight.
 
-<!-- TODO(template): list the deliberate exclusions. The three that recur:
-       - Failures thrown by a FRAMEWORK, not by this code (assertion/expect timeouts, ORM
-         errors). No class here can classify what this code never threw.
-       - Sites where the code genuinely CANNOT know whose fault it is. Typing them would assign
-         blame the throw site doesn't have; the category stays honestly unsettled.
-       - Local retry signals — a throw caught three lines later has no remedy, so typing it
-         would prefix a *warning* with a remedy label. -->
+Deliberately left untyped, and staying that way:
 
-*(nothing yet)*
+- **Everything the browser or the host page throws.** A blocked cross-origin read, a refused
+  `resizeTo`, a clipboard denial, an insecure context — none of these are this code's fault and
+  none has a remedy this code can carry out. They are environment facts, caught and ignored
+  (see Swallowed failures above).
+- **Anything ShipHawk changes upstream.** A renamed CSS class, a reordered table column, a
+  changed response shape. The failure is real but the *cause* is invisible from inside the
+  script, so a class name would assign blame the throw site cannot establish. These are recorded
+  as fragility in [`ARCHITECTURE.md`](ARCHITECTURE.md) § Known fragility, not as error classes.
+- **Failures inside the two grandfathered files generally.** Retrofitting a taxonomy onto them
+  would mean rewriting code that is exempt from convention by decision (`../CLAUDE.md`
+  § Grandfathered files). When either script next changes substantially, the code that changes
+  is the code that gets a real contract.
 
 ## Derived classification
 
@@ -86,7 +118,7 @@ nobody re-derived.
 
 | Tag | Means | Who acts |
 |---|---|---|
-| *(none yet)* | | |
+| *(none — no failure is read back from the outside; there is no status board, report, or alert)* | | |
 
 Two tags always earn their place:
 
@@ -105,7 +137,7 @@ a tag should fail to compile, not classify as "unmatched".
 
 | # | Test | → tag |
 |---|---|---|
-| *(none yet)* | | |
+| *(none — nothing to classify until something is derived)* | | |
 
 Three ordering principles that generalize:
 

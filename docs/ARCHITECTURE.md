@@ -21,18 +21,63 @@ There is no build, bundler, package manager, or server. The userscripts *are* th
 ### How the pieces fit
 
 Both scripts are injected by Tampermonkey into a ShipHawk page the user already has open, and
-neither has a backend of its own:
+neither has a backend of its own. They share no code and never interact.
 
-- **`Show Images In ShipHawk.user.js`** is *interception*-shaped. It never issues a request; it
-  monkey-patches XHR and reacts to traffic ShipHawk itself makes, which is what couples it to
-  that endpoint's response shape and to the DOM it writes into.
-- **`paccurate images`** is *scrape-and-launch*-shaped. It reads state only from what ShipHawk
-  has rendered, then hands a `packUuid` query parameter to a Paccurate-hosted editor in a
-  separate window. It talks to no API directly.
+**`Show Images In ShipHawk.user.js` — interception-shaped.** It issues no request of its own.
+An IIFE closes over the original `XMLHttpRequest.prototype.open` and replaces it; every XHR the
+page makes gets a `readystatechange` listener. The listener acts only when the URL contains
+`ready-to-ship` **and** the response URL matches ShipHawk's `orders/find` endpoint, then waits
+for the table to settle before rewriting it:
 
-Each coupling is to a surface neither script owns — a third-party endpoint response, a
-third-party DOM, a set of `data-test-id` attributes — so a silent upstream change is the expected
-failure mode, not an exceptional one.
+1. Removes its own previously injected `.test` node, so a re-render doesn't stack duplicates.
+2. Computes the order margin — the `Gross Profit` entry in `reference_numbers` minus the summed
+   `total_price` of every proposed shipment.
+3. Walks `.MuiTableRow-root`, building a SKU→row index and attaching a click-to-copy handler to
+   each UPC cell.
+4. Injects `Description` and `Weight` header cells plus their body cells, per line-item SKU.
+5. Parses each `order.description` as JSON and injects its `productImage` as a 100×100 thumbnail
+   that expands to a fixed-position 500×500 on hover.
+6. Appends a carrier logo, the shipping rate, a good/bad margin badge, and — when the service
+   name contains `surepost` — a UPS SurePost warning.
+
+**`paccurate images` — scrape-and-launch-shaped.** It reads state only from what ShipHawk has
+rendered and talks to no API. Tags come from `svg[data-test-id^="remove-tag-icon-"]`, whose
+attribute suffix is split at its last `-` to recover the tag, falling back to
+`.react-tagsinput .MuiChip-label` text when no SVG is present. **The first tag is used verbatim
+as the pack UUID** and handed to the Config Editor as `?packUuid=<tag>&embed=true`.
+
+Staying current with a single-page app is most of the file:
+
+- A `MutationObserver` on the tag container (or `document.body` as a last resort) re-reads tags
+  on any subtree or text change, debounced.
+- `history.pushState` and `replaceState` are monkey-patched, `popstate` is listened for, and a
+  polling interval backstops both in case a route change slips past all three.
+- The popup is a **named** window, so re-opening reuses the same one; a watcher samples its
+  outer size and screen position and persists them, and a nudge re-applies the saved rect after
+  navigation because browsers may ignore `window.open`'s feature string.
+- Two hotkeys: **Alt+P** opens or focuses the popup for the last known UUID, **Alt+S**
+  force-saves its current geometry for browsers that block live sampling.
+
+Every coupling either script has is to a surface it does not own — a third-party endpoint's
+response shape, a third-party DOM, a set of `data-test-id` attributes, generated CSS class names
+— so a silent upstream change is the expected failure mode, not an exceptional one.
+
+### Known fragility
+
+Where each script will break first, and why. Nothing here is a bug report; both files are
+grandfathered (`../CLAUDE.md` § Grandfathered files) and the actionable items live in
+[`WORK-ITEMS.md`](WORK-ITEMS.md) § Open items.
+
+| Coupling | Where | Why it's fragile |
+|---|---|---|
+| Exact-match on `https://shiphawk.com/api/v4/orders/find` | `Show Images`, the response-URL gate | String equality against the apex host only. A request served from a tenant subdomain does not match, so the script loads and then does nothing. |
+| `.jss68` | `Show Images`, injected body cells | A JSS-generated class name. The number is assigned at build time and changes whenever ShipHawk rebuilds its styles. |
+| `.MuiTableRow-root`, `.MuiTableCell-root`, `.MuiGrid-root`, `.MuiStep-alternativeLabel`, `.MuiTypography-body2` | `Show Images`, throughout | Material-UI internals. Any component upgrade on ShipHawk's side can rename or restructure them. |
+| Positional cell indexes (`children[1]`, `children[2]`) | `Show Images`, the SKU/UPC scan | Column order is assumed, not detected. Inserting a column upstream silently shifts what gets read. |
+| `carrierImgMap`'s six literal carrier names | `Show Images`, the order-info block | A carrier outside the map yields an `undefined` image source rather than a fallback. |
+| `order.description` as JSON | `Show Images`, the image injection | A non-JSON description throws inside the listener; there is no guard around the parse. |
+| `svg[data-test-id^="remove-tag-icon-"]`, `.react-tagsinput`, `[data-test-id="tags-select"]` | `paccurate images`, tag extraction | Test-id attributes are ShipHawk's, not ours, and carry no compatibility promise. |
+| First tag == pack UUID | `paccurate images`, `refreshFromDom` | Any tag in the first position is passed to the editor as a UUID, whatever it actually is. |
 
 ### State model
 
@@ -41,8 +86,12 @@ failure mode, not an exceptional one.
 | Popup geometry (`tmPaccuratePopupSize`) | Browser `localStorage`, per origin | Reloads and restarts; per browser profile, never shared |
 | Last pack UUID (`tmPaccurateLastUuid`) | Browser `localStorage` | Same |
 | Popup window handle, current UUID | In-page JS, module scope | Nothing — rebuilt on every page load |
+| SKU→row index, injected DOM nodes | The rendered page | Nothing — discarded on re-render, and the script removes its own `.test` node before rebuilding |
 
-No server-side state, no cookies set, no cache written by either script.
+No server-side state, no cookies set, no cache written by either script. The popup is addressed
+by a fixed window name, which is what lets a second launch retarget the existing window instead
+of stacking a new one — the only piece of cross-page-load continuity either script has beyond
+`localStorage`.
 
 ### External services
 

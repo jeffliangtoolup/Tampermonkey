@@ -88,9 +88,25 @@ a hit, so it can gate a commit — `.githooks/pre-commit` runs it against staged
      same commit that adds the integration — an ungated side effect is exactly the failure this
      doc exists to prevent. -->
 
+**Nothing in this repo writes outside itself, so this table is empty as a matter of fact rather
+than of omission.** Neither userscript sends a request, submits a form, or mutates a record: one
+reads a response ShipHawk itself requested, the other reads rendered DOM and opens a window. The
+three writes they *do* perform are all local to the person running them — the viewer's own
+`localStorage`, their clipboard, and the DOM of the page in front of them — and all three are
+undone by a reload.
+
 | Integration | Env var | `local` mode? | `live` requires | Cleanup handle |
 |---|---|---|---|---|
-| *(none yet)* | | | | |
+| *(none — no outbound write exists to gate)* | | | | |
+
+Two caveats that the empty table should not be read as denying:
+
+- **The page being mutated is production.** No write leaves the browser, but a user acting on a
+  mis-rendered order is a real consequence; that is why `../CLAUDE.md` § HARD SAFETY RULES treats
+  both scripts as live-only.
+- **NetSuite is the exception waiting to happen.** The moment a slice under `netsuite-sb/` does
+  anything, it writes to a real account and earns a row here — added in the same commit as the
+  integration, per the marker above.
 
 ## Decision rule
 

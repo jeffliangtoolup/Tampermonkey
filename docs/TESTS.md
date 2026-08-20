@@ -20,13 +20,21 @@ What that leaves unproven — every item confirmed only by a human, in a browser
 - That either userscript **parses and runs at all** after an edit.
 - That the `@match` set still covers the tenant hosts users are actually on.
 - That `Show Images In ShipHawk.user.js` still recognizes the `orders/find` response shape and
-  the DOM it injects into — both owned by ShipHawk and changed without notice.
+  the DOM it injects into — both owned by ShipHawk and changed without notice. Its most exposed
+  couplings are a hardcoded `.jss68` class name, positional cell indexes, and an exact-match on
+  the apex-host endpoint URL ([`ARCHITECTURE.md`](ARCHITECTURE.md) § Known fragility).
 - That `paccurate images` still finds its tags (`data-test-id` attributes and MUI chip labels are
   ShipHawk's markup, not ours) and that the Config Editor still accepts a `packUuid` parameter.
+- That any of the eight timing bets in [`BUDGETS.md`](BUDGETS.md) is still long enough. Each one
+  fails by doing nothing, which is indistinguishable from a page that had nothing to change.
+- That the script runs **on the host the user is actually on**. A `@match` covering a subdomain
+  proves only that the script loads there — see the first open item in
+  [`WORK-ITEMS.md`](WORK-ITEMS.md).
 - That anything under `netsuite-sb/` deploys, or behaves as intended once deployed.
 
-A convention-conformance sweep (`/refactor`) and the two git hooks are the only automatic checks
-that exist, and none of them executes project code. When a test layer does appear, everything
+The two git hooks are the only automatic checks that exist, and neither executes project code.
+A convention-conformance sweep (`/refactor`) does not apply to either script at all — both are
+grandfathered (`../CLAUDE.md` § Grandfathered files). When a test layer does appear, everything
 below this section already governs it — the ID scheme, the mock posture, and the known-red rules
 were not written for a suite that exists yet.
 

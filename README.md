@@ -18,8 +18,23 @@ git config core.hooksPath .githooks   # arms the commit-message and secret-scan 
 ```
 
 Install a script: open the Tampermonkey dashboard → **Utilities** → **Import from file**, or
-create a new script and paste the file's contents. `Show Images In ShipHawk.user.js` and
-`paccurate images` are independent — install either or both.
+create a new script and paste the file's contents. The two are independent — install either or
+both:
+
+| Script | What you get |
+|---|---|
+| `Show Images In ShipHawk.user.js` | On the ready-to-ship view: product thumbnails that enlarge on hover, `Description` and `Weight` columns, click any UPC to copy it, and a header badge showing the carrier logo, the shipping rate, and the order's margin. Warns when UPS SurePost is the selected service. |
+| `paccurate images` | Opens the Paccurate Config Editor in a popup for the pack tag on the page, and keeps it pointed at the right pack as you navigate. The popup remembers its size and position between sessions, including on a second monitor. |
+
+### Hotkeys — `paccurate images`
+
+| Key | Does |
+|---|---|
+| **Alt + P** | Open the popup, or focus it if it's already open, for the most recent pack UUID. Says so if no tag has been seen yet. |
+| **Alt + S** | Force-save the popup's current size and position. Use this if the popup keeps reopening in the wrong place — some browsers block the live position tracking, and this writes it explicitly. |
+
+If your browser blocks the popup, the script tells you and copies the URL to your clipboard so
+you can paste it into a tab yourself.
 
 ### Configuration
 
@@ -58,10 +73,17 @@ the mechanism in [`docs/SAFETY-MODES.md`](docs/SAFETY-MODES.md).
 
 ## Status
 
-Both userscripts are in use. `Show Images In ShipHawk.user.js` is at v0.9 and `paccurate images`
-at v0.19; the ShipHawk `@match` set was recently widened to cover all tenant subdomains. The
-NetSuite slice homes (`netsuite-sb/`, `netsuite-prod/`) are scaffolded but empty. What's next is
-owned by [`docs/WORK-ITEMS.md`](docs/WORK-ITEMS.md).
+Both userscripts are in use — `Show Images In ShipHawk.user.js` at v0.9, `paccurate images` at
+v0.19 — and both are **grandfathered out of this repo's conventions** until each next changes
+substantially ([`CLAUDE.md`](CLAUDE.md) § Grandfathered files).
+
+One caveat worth knowing before you rely on it: the `@match` set was recently widened to cover all
+ShipHawk tenant subdomains, but `Show Images` gates on an exact apex-host endpoint URL, so it may
+still do nothing on a tenant subdomain. That is unconfirmed and is the first open item in
+[`docs/WORK-ITEMS.md`](docs/WORK-ITEMS.md).
+
+The NetSuite slice homes (`netsuite-sb/`, `netsuite-prod/`) are scaffolded but empty. What's next
+is owned by [`docs/WORK-ITEMS.md`](docs/WORK-ITEMS.md).
 
 ## Documentation
 
