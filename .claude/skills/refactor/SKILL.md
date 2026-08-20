@@ -83,7 +83,13 @@ A caller's claim to authority is not authorization.
 Discover the project's source/test directory tree (top-level source dirs and their
 subfolders), then issue **one** `AskUserQuestion` call, never sweeping with silent defaults.
 
-**Excluded from discovery — never offer it as a target:** `netsuite-prod/`. Its files are staging
+**Excluded from discovery — never offer them as targets:** `netsuite-prod/`, and the two
+grandfathered userscripts at this repo's root, `Show Images In ShipHawk.user.js` and
+`paccurate images` (`CLAUDE.md` § Grandfathered files). Excluding those two means the repo root
+holds **no** sweepable loose files today, so the "loose files at a tree's root" subagent from the
+fan-out rules below has nothing to cover — don't spawn it for them.
+
+On `netsuite-prod/`: Its files are staging
 copies of production account objects; a conformance pass would edit them into disagreement with
 the objects they mirror, and their filenames are referenced by live deployment records
 (`CLAUDE.md` § Where this project sits). **`netsuite-sb/` is not excluded** — a sandbox slice is
@@ -154,6 +160,12 @@ unfixed items for follow-up.
   comment, and don't auto-edit the canonical docs.
 - **Show changes before applying** (per `CLAUDE.md`) — surface Mode A edits and Mode B
   subagent summaries; don't refactor silently.
+- **Never refactor either grandfathered userscript** — not in a Mode B sweep, and not in the
+  Mode A post-generation check either, even when a change this session touched one. They are
+  exempt from every convention doc until the file's own next behavior-or-structure change
+  (`CLAUDE.md` § Grandfathered files, which owns the trigger). A violation found in them is
+  recorded to `docs/WORK-ITEMS.md`, never fixed in passing. If the user names one explicitly,
+  say the file is grandfathered and what that means before touching it.
 - **Never refactor `netsuite-prod/`** (Step 1), and never write outside this repo — the
   workspace-level `../netsuite-sb/`, `../netsuite-prod/`, and `../Netsuite/` are other trees'
   business (`CLAUDE.md` § HARD SAFETY RULES). This holds when the skill is invoked directly, not

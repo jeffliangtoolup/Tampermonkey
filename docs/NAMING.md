@@ -5,18 +5,43 @@ verb prefixes, sortable dates) and swap the case style for the language's idiom.
 appears, replace the generic examples with real ones from this repo so each rule stays
 grounded. <!-- TODO(template): swap in real examples -->
 
+**Both userscripts are exempt from this doc** until each next changes substantially — the trigger
+and its scope are owned by [`../CLAUDE.md`](../CLAUDE.md) § Grandfathered files. Where a rule
+below already has a matching example in one of them, it is cited as *precedent to follow*, not as
+a claim that the file conforms: `paccurate images` mixes 2-space and 4-space indentation, defines
+`readTags()` twice, and shadows `DEFAULTS.width`/`.w` between two shapes of the same rect;
+`Show Images In ShipHawk.user.js` is `var`-scoped throughout, nests four named functions inside a
+`setTimeout` callback, and uses `snake_case` where it mirrors ShipHawk's own JSON field names.
+
 - **camelCase** — variables, functions, and `let`/`const` declarations.
-  *e.g.* `parseConfig()`, `retryCount`, `isReady`.
+  *e.g.* `readTags()`, `getSavedRect()`, `currentUuid`, `popupRef`, `tagObserver`.
+  **Except when mirroring an external payload**: a field read straight off ShipHawk's JSON keeps
+  that payload's spelling (`order_line_items`, `proposed_shipments`, `reference_numbers`,
+  `total_price`), because renaming it costs a reader the ability to grep the response for it.
 - **PascalCase** — classes, interfaces, and types.
-  *e.g.* `class OrderService`, `interface RetryPolicy`, `type ParseResult`.
+  *e.g.* `class OrderService`, `interface RetryPolicy`, `type ParseResult`. Neither script
+  declares one today; both are plain-function IIFEs.
 - **UPPER_SNAKE_CASE** — constants and enum values.
-  *e.g.* `MAX_RETRIES`, `DEFAULT_TIMEOUT_MS`, `API_BASE_URL`.
+  *e.g.* `URL_BASE`, `POP_NAME`, `SIZE_KEY`, `LAST_UUID_KEY`, `HOTKEY_OPEN`, `AUTO_FOCUS` — the
+  block at the top of `paccurate images` is the precedent for new code, including the practice of
+  naming a `localStorage` key rather than inlining the string at both the read and the write.
 - **Boolean names** — prefix with `is`, `has`, `should`, or `can`.
 - **Function names** — use a verb prefix where applicable: `get`, `set`, `fetch`, `handle`,
   `on`, `go`, `expect`, `build`, `parse`. Pick a small verb vocabulary early and stay
-  consistent (e.g. all navigation helpers `go*`, all assertion helpers `expect*`).
+  consistent (e.g. all navigation helpers `go*`, all assertion helpers `expect*`). The existing
+  vocabulary worth extending rather than replacing: `get*` for a pure read (`getSavedRect`,
+  `getTagsFromSvgs`), `read*` for a read that picks between sources (`readTags`), `save*` for a
+  persist (`saveRect`), `add*` for a DOM injection (`addHeaderRow`, `addBodyRow`, `addOrderInfo`),
+  `observe*`/`install*` for anything that attaches a listener and leaves it running
+  (`observeTagArea`, `installRouteHooks`), and `start*`/`stop*` as a matched pair around an
+  interval (`startGeometryWatcher`/`stopGeometryWatcher`).
 - **File names — kebab-case where applicable.**
   - **kebab-case** for modules and scripts: `order-service.ts`, `parse-config.ts`.
+  - **`*.user.js` for a userscript**, since Tampermonkey and greasyfork both key install
+    behavior off that suffix. Neither existing script is a model here — one is
+    `Show Images In ShipHawk.user.js` (spaces, Title Case) and the other has no extension at all
+    — and both keep their names under the grandfather clause above. New scripts get
+    `kebab-case.user.js`.
   - **PascalCase** only where the filename mirrors a one-class-per-file exported class *and*
     that's the established pattern for that folder (e.g. page objects, React components).
     A single class export does **not** by itself promote a file to PascalCase — files stay

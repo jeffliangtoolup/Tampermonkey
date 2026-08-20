@@ -5,10 +5,12 @@ repository.
 
 Two Tampermonkey userscripts that add capability to the **ShipHawk TMS web UI** for PCS Tools
 warehouse users, plus the NetSuite-side changes that feed them. `Show Images In ShipHawk.user.js`
-intercepts ShipHawk's own XHR traffic to inject item images, click-to-copy UPCs, and carrier
-logos into the ready-to-ship views; `paccurate images` reads Paccurate pack tags off the rendered
-DOM and drives a persistent popup onto the Paccurate Config Editor. Both run in the browser
-against live ShipHawk tenants — there is no build step and no server. The `netsuite-sb/` and
+patches `XMLHttpRequest.prototype.open` and reacts to ShipHawk's own `orders/find` response,
+injecting item images, Description/Weight columns, click-to-copy UPCs, carrier logos, and an
+order-margin badge into the ready-to-ship view; `paccurate images` runs at
+`@run-at document-start`, reads Paccurate pack tags off the rendered DOM, and drives a persistent
+popup window onto the Paccurate Config Editor with hotkeys and remembered geometry. Both run in
+the browser against live ShipHawk tenants — there is no build step and no server. The `netsuite-sb/` and
 `netsuite-prod/` directories hold this project's own thin SDF slices for the NetSuite side of the
 integration; see `docs/ARCHITECTURE.md`.
 
@@ -77,6 +79,44 @@ here name *this project's* guarded paths and link there; they don't restate the 
   acting on production data in a real browser session — read-only interactions where possible,
   and never a bulk or scripted pass.
 
+## Grandfathered files
+
+Both userscripts predate every convention in this repo, and they are **deliberately exempt from
+them** until each one is next changed substantially. This is a standing decision
+(`docs/WORK-ITEMS.md` #6), not a backlog item:
+
+| File | Status |
+|---|---|
+| `Show Images In ShipHawk.user.js` | Grandfathered |
+| `paccurate images` | Grandfathered — including its missing `.user.js` extension |
+
+**What the exemption covers.** Naming ([`docs/NAMING.md`](docs/NAMING.md)), comments
+([`docs/COMMENTS.md`](docs/COMMENTS.md)), and every other code-style rule in `docs/` simply do
+not apply to these two files. `/refactor` never targets them, in either mode. Any future
+reorganization of this repo — new directories, renamed files — **leaves them where and as they
+are**, extensionless filename included. Reading them and finding a convention violation is not a
+finding; it is the expected state.
+
+**What it does not cover.** The secret gate still scans them, commits that touch them still
+follow [`docs/COMMITS.md`](docs/COMMITS.md), and § HARD SAFETY RULES binds them absolutely —
+these are the files that touch live production tenants, so the exemption is about *style*, never
+about safety.
+
+**When it ends — per file, independently.** A file leaves grandfathered status on the first
+change that **alters its behavior or reshapes its structure**: adding, removing, or reworking a
+function, or changing what the script does. Explicitly *not* triggers: an `@version` bump, an
+`@match` edit, a constant tweak, or a comment change — those may be made freely with the
+exemption intact.
+
+At that point, and only for the file that changed: rename it to `*.user.js` if it isn't already,
+and bring **the code the change touches** to convention. The untouched remainder of the file
+stays as it is — a behavior change is not a licence to rewrite the whole script, and a diff that
+mixes the two is exactly what [`docs/COMMITS.md`](docs/COMMITS.md) tie-breaker 1 forbids.
+
+Known convention and correctness debt inside both files is recorded as open items in
+[`docs/WORK-ITEMS.md`](docs/WORK-ITEMS.md) — record what you notice there rather than fixing it
+in passing.
+
 ## Conventions
 
 - Naming: [`docs/NAMING.md`](docs/NAMING.md)
@@ -96,8 +136,8 @@ here name *this project's* guarded paths and link there; they don't restate the 
 - Subagent model selection: [`docs/SUBAGENTS.md`](docs/SUBAGENTS.md) — set `model` explicitly
   on every spawn.
 - `/refactor` (`.claude/skills/refactor/SKILL.md`) enforces these docs: automatically on code
-  Claude just wrote, and as an on-demand directory sweep. **`netsuite-prod/` is excluded** — see
-  § Where this project sits.
+  Claude just wrote, and as an on-demand directory sweep. **`netsuite-prod/` is excluded** (see
+  § Where this project sits) and **so are both userscripts** (see § Grandfathered files).
 - `/commit` (`.claude/skills/commit/SKILL.md`) groups working-tree changes into small-to-medium
   commits per `docs/COMMITS.md`; a format-only `.githooks/commit-msg` gate backs it up (enable
   once per clone: `git config core.hooksPath .githooks`).
