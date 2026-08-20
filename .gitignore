@@ -1,0 +1,35 @@
+# Real secrets. Only .env.example is committed — docs/SAFETY-MODES.md → The secret gate.
+.env
+.env.*
+!.env.example
+
+# `local` mode output — real payloads that were built and never sent (docs/SAFETY-MODES.md).
+local-writes/
+
+# Working files for a task in flight — docs/DOCS.md § Temporary files. Never committed;
+# every fact in here is promoted to its owning doc or deleted when the task ends.
+scratch/
+
+# Dependencies and build output.
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Browser-driven verification output — snapshots, console logs, screenshots.
+.playwright-mcp/
+
+*.log
+.DS_Store
+
+# Per-developer SDF auth binding, in either slice home. Committing one pushes your account
+# binding onto everyone else — and a wrong binding aims a deploy at the wrong account
+# (CLAUDE.md § HARD SAFETY RULES).
+netsuite-sb/**/project.json
+netsuite-prod/**/project.json
+
+# SuiteCloud CLI working output inside a slice — `project:package` builds and CLI logs.
+netsuite-sb/**/build/
+netsuite-prod/**/build/
+.suitecloud/

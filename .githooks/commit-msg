@@ -1,0 +1,64 @@
+#!/bin/sh
+# commit-msg — format-only gate for commit subjects. Canonical rules: docs/COMMITS.md.
+# Checks the subject's type-prefix, length, and that it is a single line separated from
+# the body by a blank line. Does not check grouping, body content, or the trailer.
+# Bypass a false positive with: git commit --no-verify
+
+msg_file="$1"
+
+# Content view = message with git's comment lines removed (git strips these on cleanup).
+content=$(grep -vE '^[[:space:]]*#' "$msg_file")
+
+# Subject = first non-blank line of the content.
+subject=$(printf '%s\n' "$content" | grep -vE '^[[:space:]]*$' | head -n 1)
+
+# Git-generated subjects that don't follow the convention pass untouched.
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+esac
+
+fail() {
+  echo "commit-msg: $1" >&2
+  echo "  subject : $subject" >&2
+  echo "  expected: <type>(<scope>): <subject>   scope optional   (docs/COMMITS.md)" >&2
+  echo "  types   : feat fix refactor docs test chore" >&2
+  echo "  bypass  : git commit --no-verify" >&2
+  exit 1
+}
+
+# 1. Type prefix + optional lowercase scope + ': ' + non-empty description.
+if ! printf '%s' "$subject" | grep -qE '^(feat|fix|refactor|docs|test|chore)(\([a-z0-9-]+\))?: .+'; then
+  fail "subject must start with a type prefix"
+fi
+
+# 2. Subject length cap (docs/COMMITS.md: <= 72) so the title never truncates in the field.
+len=$(printf '%s' "$subject" | wc -c)
+if [ "$len" -gt 72 ]; then
+  fail "subject is ${len} chars; cap is 72"
+fi
+
+# 3. Single-line subject, then a blank line — the title must not bleed into the body.
+bleed=$(printf '%s\n' "$content" | awk '
+  !seen && $0 ~ /^[[:space:]]*$/ { next }   # skip any leading blank lines
+  !seen { seen=1; next }                    # the subject line
+  { if ($0 !~ /^[[:space:]]*$/) print "1"; exit }   # first line after subject
+')
+if [ "$bleed" = "1" ]; then
+  fail "subject must be one line, then a blank line before the body"
+fi
+
+# 4. Feature-series counter: an (X/Y) in the subject must satisfy 1 <= X <= Y and never be
+#    (1/1). Whether a counter *belongs* is a human call; the hook only checks its arithmetic.
+counter=$(printf '%s' "$subject" | grep -oE '\([0-9]+/[0-9]+\)' | head -n 1)
+if [ -n "$counter" ]; then
+  x=$(printf '%s' "$counter" | sed -E 's/^\(([0-9]+)\/([0-9]+)\)$/\1/')
+  y=$(printf '%s' "$counter" | sed -E 's/^\(([0-9]+)\/([0-9]+)\)$/\2/')
+  if [ "$x" -eq 1 ] && [ "$y" -eq 1 ]; then
+    fail "series counter (1/1) is not allowed — a lone commit carries no counter"
+  fi
+  if [ "$x" -lt 1 ] || [ "$x" -gt "$y" ]; then
+    fail "series counter must be (X/Y) with 1 <= X <= Y"
+  fi
+fi
+
+exit 0

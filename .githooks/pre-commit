@@ -1,0 +1,13 @@
+#!/bin/sh
+# pre-commit — run the secret gate on staged content. Canonical rules:
+# docs/SAFETY-MODES.md → The secret gate.  Bypass: git commit --no-verify
+#
+# The gate is opt-in by presence: a project that deletes scripts/check-secrets.sh
+# commits normally. It is invoked via `sh` rather than executed, so a lost mode bit
+# can't silently disable it — the failure mode that makes a hook worthless.
+
+gate="scripts/check-secrets.sh"
+[ -f "$gate" ] || exit 0
+
+sh "$gate" --staged || exit 1
+exit 0
