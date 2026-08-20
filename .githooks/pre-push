@@ -1,0 +1,88 @@
+#!/bin/sh
+# pre-push — refuse to push internal NetSuite state, or a credential that slipped past
+# pre-commit. Canonical rules: docs/SAFETY-MODES.md → What must never leave this repo.
+# Bypass: git push --no-verify
+#
+# The two slice homes are deliberately git-TRACKED and never PUSHED (CLAUDE.md → HARD
+# SAFETY RULES). Git has no per-path push filter, so this hook is the enforcement: it
+# inspects only the commits actually being pushed and aborts the whole push if any of
+# them touches those paths. Consequence worth knowing before you hit it: once such a
+# commit sits behind work you want to push, that branch cannot be pushed at all — keep
+# NetSuite commits on a branch you never push.
+
+set -u
+
+BLOCKED_PATHS='^netsuite-sb/|^netsuite-prod/'
+zero=$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')
+
+blocked_total=0
+range_files=''
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  # A branch deletion pushes no content.
+  [ "$local_sha" = "$zero" ] && continue
+
+  if [ "$remote_sha" = "$zero" ]; then
+    commits=$(git rev-list "$local_sha" --not --remotes)
+  else
+    commits=$(git rev-list "$remote_sha".."$local_sha")
+  fi
+
+  for commit in $commits; do
+    range_files="$range_files
+$(git diff-tree -r --no-commit-id --name-only "$commit")"
+  done
+done
+
+range_files=$(printf '%s\n' "$range_files" | sed '/^$/d' | sort -u)
+[ -n "$range_files" ] || exit 0
+
+blocked=$(printf '%s\n' "$range_files" | grep -E "$BLOCKED_PATHS" || true)
+if [ -n "$blocked" ]; then
+  blocked_total=$(printf '%s\n' "$blocked" | wc -l | tr -d ' ')
+  {
+    echo ""
+    echo "✗ push refused — $blocked_total file(s) under the NetSuite slice homes are in this push:"
+    printf '%s\n' "$blocked" | sed 's/^/    /'
+    echo ""
+    echo "  These directories are tracked locally and never pushed: they carry internal"
+    echo "  NetSuite state (object names, field ids, account structure) and origin is a"
+    echo "  public repository. See CLAUDE.md → HARD SAFETY RULES."
+    echo ""
+    echo "  Keep NetSuite commits on a branch you do not push. To push the rest of this"
+    echo "  branch, the commits touching those paths must not be in the pushed range."
+    echo "  Deliberate one-off: git push --no-verify"
+  } >&2
+  exit 1
+fi
+
+# Second gate: catch a credential in content that reached git via `commit --no-verify`.
+gate="scripts/check-secrets.sh"
+if [ -f "$gate" ]; then
+  existing=''
+  old_ifs=$IFS
+  IFS='
+'
+  for file in $range_files; do
+    [ -f "$file" ] && existing="$existing$file
+"
+  done
+  IFS=$old_ifs
+
+  if [ -n "$existing" ]; then
+    # shellcheck disable=SC2086 # word-splitting on newlines is the argument list we want
+    old_ifs=$IFS
+    IFS='
+'
+    # shellcheck disable=SC2046
+    sh "$gate" $(printf '%s' "$existing") || {
+      echo "" >&2
+      echo "✗ push refused — see above. Deliberate one-off: git push --no-verify" >&2
+      IFS=$old_ifs
+      exit 1
+    }
+    IFS=$old_ifs
+  fi
+fi
+
+exit 0
