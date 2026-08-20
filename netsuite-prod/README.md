@@ -1,6 +1,6 @@
 # netsuite-prod — prod-side staging
 
-The production (account `855722`) counterpart of each `../netsuite-sb/` slice: the objects and
+The production counterpart of each `../netsuite-sb/` slice: the objects and
 files a prod deploy *would* carry, staged so the diff against sandbox is reviewable before anyone
 acts on it. Same one-subdirectory-per-feature layout as the sandbox side, with a `project.json`
 bound to the prod account — gitignored, never committed.

@@ -1,6 +1,6 @@
 # netsuite-sb — sandbox slices
 
-The sandbox (SB2, account `855722_SB2`) side of the NetSuite work behind these userscripts. One
+The sandbox (SB2) side of the NetSuite work behind these userscripts. One
 subdirectory per feature, each a self-contained thin SDF project:
 
 ```
