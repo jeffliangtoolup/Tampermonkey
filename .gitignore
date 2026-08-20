@@ -29,6 +29,10 @@ build/
 netsuite-sb/**/project.json
 netsuite-prod/**/project.json
 
+# Bytecode from the repo's own python scripts (the NetSuite MCP guard).
+__pycache__/
+*.pyc
+
 # SuiteCloud CLI working output inside a slice — `project:package` builds and CLI logs.
 netsuite-sb/**/build/
 netsuite-prod/**/build/

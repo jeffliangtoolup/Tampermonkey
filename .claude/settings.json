@@ -1,3 +1,18 @@
 {
-  "permissions": {}
+  "permissions": {},
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__netsuite__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/scripts/netsuite-mcp-guard.py\"",
+            "timeout": 10,
+            "statusMessage": "NetSuite MCP: prod-write guard"
+          }
+        ]
+      }
+    ]
+  }
 }
