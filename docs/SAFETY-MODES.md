@@ -88,25 +88,72 @@ a hit, so it can gate a commit — `.githooks/pre-commit` runs it against staged
      same commit that adds the integration — an ungated side effect is exactly the failure this
      doc exists to prevent. -->
 
-**Nothing in this repo writes outside itself, so this table is empty as a matter of fact rather
-than of omission.** Neither userscript sends a request, submits a form, or mutates a record: one
-reads a response ShipHawk itself requested, the other reads rendered DOM and opens a window. The
-three writes they *do* perform are all local to the person running them — the viewer's own
-`localStorage`, their clipboard, and the DOM of the page in front of them — and all three are
-undone by a reload.
+**No *code* in this repo writes outside itself.** Neither userscript sends a request, submits a
+form, or mutates a record: one reads a response ShipHawk itself requested, the other reads
+rendered DOM and opens a window. The three writes they perform are local to the person running
+them — the viewer's own `localStorage`, their clipboard, and the DOM of the page in front of them
+— and all three are undone by a reload.
 
-| Integration | Env var | `local` mode? | `live` requires | Cleanup handle |
+**The tooling is a different matter.** A session working in this repo holds the NetSuite MCP,
+which reaches two live accounts, and that is a write path whatever the repo's own code does. It is
+gated here rather than left to judgment:
+
+| Integration | Gate | `local` mode? | Writes require | Cleanup handle |
 |---|---|---|---|---|
-| *(none — no outbound write exists to gate)* | | | | |
+| NetSuite MCP → **production** | `scripts/netsuite-mcp-guard.py` (`PreToolUse` on `mcp__netsuite__.*`) returns `deny` | n/a | **nothing — writes are never permitted** | n/a; the gate is that no write happens |
+| NetSuite MCP → **sandbox (SB2)** | same guard returns `ask` | n/a | explicit per-call approval, every call | the sandbox itself — refreshed from production, so damage is bounded by the next refresh |
+| NetSuite MCP → **either account, reads** | ungated by design | n/a | nothing | none needed |
+| Both userscripts | none — no outbound write exists to gate | n/a | n/a | a page reload |
 
-Two caveats that the empty table should not be read as denying:
+The guard is **default-deny in the sense this doc means**: it classifies a call it does not
+recognize as a production write. A new write-capable tool on that server is therefore blocked
+before anyone has reviewed it, rather than allowed until someone notices. The rule it enforces,
+its one accepted gap (a `GET`-invoked RESTlet), and the procedure for removing it are owned by
+[`../CLAUDE.md`](../CLAUDE.md) § HARD SAFETY RULES.
 
-- **The page being mutated is production.** No write leaves the browser, but a user acting on a
-  mis-rendered order is a real consequence; that is why `../CLAUDE.md` § HARD SAFETY RULES treats
-  both scripts as live-only.
-- **NetSuite is the exception waiting to happen.** The moment a slice under `netsuite-sb/` does
-  anything, it writes to a real account and earns a row here — added in the same commit as the
-  integration, per the marker above.
+One caveat the userscript row should not be read as denying: **the page being mutated is
+production.** No write leaves the browser, but a user acting on a mis-rendered order is a real
+consequence — which is why both scripts are treated as live-only.
+
+## What must never leave this repo
+
+`origin` is a **public** GitHub repository, and it is not owned by this project's maintainer. That
+single fact sets the rule: anything committed here is world-readable the moment it is pushed, and
+unpushing does not unpublish it.
+
+**Three classes never go into a tracked file.** The first two have mechanical detectors; the third
+does not, and cannot.
+
+| Class | Examples | Enforcement |
+|---|---|---|
+| **Credentials** | private keys, bearer/basic tokens, NetSuite token-id/secret and consumer-key/secret pairs, a ShipHawk API key, credentials embedded in a URL | `scripts/check-secrets.sh` via `.githooks/pre-commit` — the commit is refused |
+| **Internal identifiers** | NetSuite account numbers, the `<digits>_SB<n>` sandbox realm, anything of the form *account 1234567* | same gate, patterns `netsuite-account-id` / `netsuite-sandbox-realm` |
+| **Proprietary data** | customer or vendor names, order or margin figures, pricing, business rules, internal process detail, screenshots of live records | **judgment only — no detector exists** |
+
+The detectors match **shapes, never literal values**: putting this account's number into the
+pattern list would place that number in a tracked file, which is moving the leak rather than
+closing it. That also means they catch the *next* account, not just this one.
+
+**The third row is the one that will actually bite.** No regex recognizes a customer name or a
+margin figure. Before committing, the question to ask about any concrete example, log excerpt,
+error message, or record dump is: *would I be comfortable with a stranger reading this?* If the
+answer is no, generalize it — "a sales order in a warehouse-assigned state" carries the same
+technical meaning as a real order number and leaks nothing.
+
+**Two directories are tracked but never pushed.** `netsuite-sb/` and `netsuite-prod/` hold SDF
+slices — object names, script ids, field ids, deployment structure — which together describe the
+internal shape of a live NetSuite account. They are versioned locally because that work deserves
+history, and they never reach `origin`. `.githooks/pre-push` is the enforcement: it inspects the
+commits in the push and refuses the whole push if any touches those paths.
+
+Git has **no per-path push filter**, so this constrains the workflow rather than just the tooling:
+a commit touching those directories makes its branch unpushable while it is in the range. Keep
+NetSuite work on a branch that is never pushed. The hook is a backstop against forgetting, not a
+substitute for that discipline. Both hooks arm together:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Decision rule
 

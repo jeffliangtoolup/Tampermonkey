@@ -14,8 +14,14 @@ account with access to your tenant. Nothing else — no Node, no package manager
 ```bash
 git clone https://github.com/jeffliangtoolup/Tampermonkey.git
 cd Tampermonkey
-git config core.hooksPath .githooks   # arms the commit-message and secret-scan hooks
+git config core.hooksPath .githooks   # arms the commit-message, secret-scan, and push hooks
 ```
+
+**Two things this repo will refuse to do.** `origin` is public, so the hooks stop a commit that
+carries a credential or an internal identifier (an account number, a sandbox realm), and stop any
+push that touches `netsuite-sb/` or `netsuite-prod/` — those are tracked locally and never
+published. Keep NetSuite commits on a branch you do not push. Details in
+[`docs/SAFETY-MODES.md`](docs/SAFETY-MODES.md) → *What must never leave this repo*.
 
 Install a script: open the Tampermonkey dashboard → **Utilities** → **Import from file**, or
 create a new script and paste the file's contents. The two are independent — install either or

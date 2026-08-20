@@ -59,6 +59,42 @@ The mechanism behind those rules — the `<INTEGRATION>_MODE` convention, the re
 ladder, and the secret gate — is owned by [`docs/SAFETY-MODES.md`](docs/SAFETY-MODES.md). Rules
 here name *this project's* guarded paths and link there; they don't restate the mechanism.
 
+- **The NetSuite MCP never writes to production. No exception, no override.** Every
+  `mcp__netsuite__*` call that creates, updates, deletes, or transforms a record — or runs a
+  non-`SELECT` SuiteQL statement, or invokes a RESTlet with `POST`/`PUT`/`DELETE` — is **refused**
+  when `env` is `prod`. A refusal is final: do not retry it, do not reshape the arguments, do not
+  route around it. **Reads against production are fine** (`GET`, `SELECT`/`WITH` SuiteQL, script
+  logs, record metadata) and need no ceremony.
+- **The NetSuite MCP writes to sandbox only with explicit per-call approval.** Sandbox writes are
+  not pre-authorized: each one prompts, and an approval covers that call and nothing after it.
+- **Mechanical guard:** [`scripts/netsuite-mcp-guard.py`](scripts/netsuite-mcp-guard.py), wired as
+  a `PreToolUse` hook on `mcp__netsuite__.*` in
+  [`.claude/settings.json`](.claude/settings.json). It reads each call's `env` and method and
+  returns `deny` for a prod write, `ask` for a sandbox write, and nothing at all for a read. It
+  **fails closed**: an unrecognized tool, an unrecognized HTTP method, an unparseable SuiteQL
+  statement, or a payload it cannot read is treated as a prod write and denied. That matters
+  because the guard is what holds when the session runs in a permission mode that would otherwise
+  auto-approve — the rule above is not self-enforcing.
+- **One known gap, accepted deliberately:** a RESTlet invoked with `GET` is classified as a read,
+  so a prod RESTlet whose `GET` handler writes would pass the guard. HTTP method is the only
+  signal available without knowing what the script does. Treat a prod RESTlet as a write path
+  regardless of method.
+- **To remove this rule** — it holds until it is deleted on purpose, in three places: the two
+  bullets above plus this one, the hook block in `.claude/settings.json`, and
+  `scripts/netsuite-mcp-guard.py`. Deleting only the script leaves a hook that errors on every
+  call; deleting only the hook leaves a rule with no enforcement. `docs/WORK-ITEMS.md` #7 records
+  why it exists, and should be revised in place rather than deleted if the rule changes.
+- **`origin` is a PUBLIC repo. Never commit a credential, an internal identifier, or
+  proprietary data.** Account numbers, sandbox realms, customer or vendor names, order and margin
+  figures, pricing, and live record dumps all stay out of tracked files — generalize the example
+  instead. `scripts/check-secrets.sh` refuses a commit carrying the first two classes; the third
+  has no detector and rests on judgment. Owned by
+  [`docs/SAFETY-MODES.md`](docs/SAFETY-MODES.md) → *What must never leave this repo*.
+- **Never push `netsuite-sb/` or `netsuite-prod/`.** They are git-tracked on purpose and must
+  never reach `origin` — SDF slices spell out object names, script and field ids, and deployment
+  structure for a live account. `.githooks/pre-push` refuses any push whose commits touch them.
+  Because git cannot filter a push by path, this is also a workflow rule: **keep NetSuite commits
+  on a branch you never push.**
 - **Never deploy to NetSuite production from this repo.** `suitecloud project:deploy` and
   `file:upload` are never run against a production account here, with or without a passing
   sandbox test. `netsuite-prod/` exists to *stage* what a prod deploy would carry, and the deploy
@@ -157,11 +193,16 @@ The NetSuite side of this integration is developed in slices under this repo:
 
 | Directory | What it is | Skill scope |
 |---|---|---|
-| `netsuite-sb/` | Sandbox (SB2) SDF slices — where a NetSuite change is written and verified. | In scope for `/commit` and `/refactor`. |
-| `netsuite-prod/` | Prod-side staging copies of what a deploy would carry. No deploy is ever run from here. | In scope for `/commit` (it is tracked); **never a `/refactor` target** — these files mirror account objects, and conformance-editing them makes them diverge from the account they mirror. |
+| `netsuite-sb/` | Sandbox (SB2) SDF slices — where a NetSuite change is written and verified. **Tracked, never pushed.** | In scope for `/commit` and `/refactor`. |
+| `netsuite-prod/` | Prod-side staging copies of what a deploy would carry. No deploy is ever run from here. **Tracked, never pushed.** | In scope for `/commit` (it is tracked); **never a `/refactor` target** — these files mirror account objects, and conformance-editing them makes them diverge from the account they mirror. |
 
 Each home owns its own `README.md`; the workspace-level `../netsuite-sb/` and `../netsuite-prod/`
 are a different thing entirely and off limits (see § HARD SAFETY RULES).
+
+**Committable is not pushable.** Both homes are versioned locally and neither may reach `origin`,
+which is public. `/commit` may group their changes; nothing may push them. Keep those commits on
+a branch you never push — `.githooks/pre-push` refuses the push, but only after you have already
+built a branch that cannot go out.
 
 ## Canonical-doc ownership
 

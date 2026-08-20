@@ -116,10 +116,20 @@ it never fires. After committing, show the resulting `git log --oneline` for the
   explicit path list, never a blanket `git add -A`. In this repo that explicitly includes any
   `netsuite-*/**/project.json`: it carries a per-developer SDF auth binding and is gitignored for
   that reason (`CLAUDE.md` § HARD SAFETY RULES).
-- **Both slice homes are committable.** `netsuite-sb/` and `netsuite-prod/` are tracked
-  directories of this repo, so their changes group like any others — unlike `/refactor`, which
-  never targets `netsuite-prod/`. Everything the convention docs at this root say applies to them;
-  they carry no `docs/` of their own, so there is never a fallback to resolve.
+- **Both slice homes are committable but never pushable.** `netsuite-sb/` and `netsuite-prod/`
+  are tracked directories of this repo, so their changes group like any others — unlike
+  `/refactor`, which never targets `netsuite-prod/`. Everything the convention docs at this root
+  say applies to them; they carry no `docs/` of their own, so there is never a fallback to resolve.
+  **They must never reach `origin`, which is public** (`CLAUDE.md` § HARD SAFETY RULES). This skill
+  never pushes, so it cannot violate that by itself — but a commit it makes on a branch that later
+  gets pushed can. When a proposed group touches either home, **say so in the plan** and name the
+  branch consequence: that commit makes its branch unpushable while it is in the range, so it
+  belongs on a branch that is never pushed. `.githooks/pre-push` is the backstop.
+- **Never commit an internal identifier or proprietary data**, not just a credential: account
+  numbers, sandbox realms, customer or vendor names, order and margin figures, live record dumps.
+  The `pre-commit` gate catches identifier and credential *shapes*; proprietary data has no
+  detector, so read the diff for it before proposing a group
+  (`docs/SAFETY-MODES.md` → What must never leave this repo).
 - **Don't run the test suite or mutate app state** as part of committing — that's a separate,
   explicit step.
 - **The Claude trailer goes on every commit this skill makes.**

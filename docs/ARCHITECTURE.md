@@ -12,8 +12,8 @@ it doesn't have a home yet; give it one before writing it down twice.
 |---|---|
 | `Show Images In ShipHawk.user.js` | Userscript. Wraps `XMLHttpRequest.prototype.open` and, on ShipHawk's `ready-to-ship` views, reads the response of `POST /api/v4/orders/find` to inject item images, click-to-copy UPCs, and carrier logos into the rendered table. |
 | `paccurate images` | Userscript. Reads Paccurate pack tags out of the *rendered DOM* (`svg[data-test-id^="remove-tag-icon-"]`, falling back to `.react-tagsinput .MuiChip-label`), derives a pack UUID, and opens/updates a named popup window onto the Paccurate Config Editor. SPA-aware and hotkey-driven. Its filename carries no `.user.js` extension — see `docs/WORK-ITEMS.md`. |
-| `netsuite-sb/` | Sandbox (SB2) thin SDF slices for the NetSuite side of the integration. Own `README.md`. |
-| `netsuite-prod/` | Prod-side staging copies of what a deploy would carry. No deploy runs from here. Own `README.md`. |
+| `netsuite-sb/` | Sandbox (SB2) thin SDF slices for the NetSuite side of the integration. Own `README.md`. **Tracked, never pushed** — see [`SAFETY-MODES.md`](SAFETY-MODES.md) → What must never leave this repo. |
+| `netsuite-prod/` | Prod-side staging copies of what a deploy would carry. No deploy runs from here. Own `README.md`. **Tracked, never pushed.** |
 | `docs/`, `CLAUDE.md`, `.claude/`, `.githooks/`, `scripts/` | The convention set, the two local skills, and the two git hooks. |
 
 There is no build, bundler, package manager, or server. The userscripts *are* the artifacts.
@@ -100,7 +100,7 @@ of stacking a new one — the only piece of cross-page-load continuity either sc
 | ShipHawk TMS (`*.shiphawk.com`, `*.myshiphawk.com`) | The host application both scripts run inside; source of the intercepted `orders/find` response | The user's own logged-in session. No key, no credential stored |
 | Paccurate Config Editor (`inspector.manage.paccurate.io`) | The popup target for a pack UUID | None — `URL_BASE` in `paccurate images` |
 | ShipHawk asset S3 bucket, and two third-party image hosts | Carrier logos and placeholder images, hot-linked | None |
-| NetSuite (prod `855722`, sandbox `855722_SB2`) | The account the `netsuite-*/` slices target | Per-developer SDF auth ID in a gitignored `project.json` |
+| NetSuite (production and SB2 sandbox) | The accounts the `netsuite-*/` slices target. Account numbers are deliberately absent from this repo — see `SAFETY-MODES.md` → What must never leave this repo | Per-developer SDF auth ID in a gitignored `project.json` |
 
 The two hot-linked non-ShipHawk image hosts (`i.pinimg.com`, `www.stickertalk.com`) are outside
 anyone's control here and will eventually 404.
@@ -109,10 +109,16 @@ anyone's control here and will eventually 404.
 
 Every path this project has is a live one — there is no staging ShipHawk tenant and no mock mode,
 so the mode convention in [`SAFETY-MODES.md`](SAFETY-MODES.md) has nothing to gate on the
-userscript side. The guarded paths are the NetSuite ones (no prod deploy from this repo, no write
-to the pull-only prod mirror, sandbox-first, never commit a `project.json`) and they are enforced
-by rule plus the `.gitignore` entries; the rules themselves are owned by
-[`../CLAUDE.md`](../CLAUDE.md) → *HARD SAFETY RULES*.
+userscript side. The guarded paths are the NetSuite ones (no MCP write to production ever,
+sandbox MCP writes only on explicit approval, no prod deploy from this repo, no write to the
+pull-only prod mirror, sandbox-first, never commit a `project.json`). Several are enforced
+mechanically rather than by memory: `scripts/netsuite-mcp-guard.py` inspects every
+`mcp__netsuite__*` call and denies a production write outright, `.githooks/pre-commit` refuses a
+commit carrying a credential or an internal identifier, `.githooks/pre-push` refuses any push
+touching the two never-pushed slice homes, and the `.gitignore` entries keep a `project.json`
+unstageable. The rules themselves are owned by
+[`../CLAUDE.md`](../CLAUDE.md) → *HARD SAFETY RULES*; how the MCP gate works is owned by
+[`SAFETY-MODES.md`](SAFETY-MODES.md) → *This project's integrations*.
 
 ### Tests and budgets
 
